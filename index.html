@@ -48,6 +48,10 @@ async function uploadFileToDrive(file){
   return null;
 }
 
+/* ══════════ DRIVE DELETE HELPER ══════════ */
+function deleteDriveFile(fid){apiPost({action:"deleteFile",driveFileId:fid})}
+function deleteDriveFiles(files){if(files&&files.length)files.forEach(function(f){deleteDriveFile(f.driveFileId||f.id)})}
+
 /* ══════════ HELPERS ══════════ */
 function gid(){return Date.now().toString(36)+Math.random().toString(36).substr(2,6)}
 function fmtDate(s){if(!s)return"";var d=new Date(s);var wd=["日","一","二","三","四","五","六"];return(d.getMonth()+1)+"月"+d.getDate()+"日（"+wd[d.getDay()]+"）"}
@@ -191,11 +195,15 @@ function App(){
   var fDuties=useMemo(function(){var s=duties.slice().sort(function(a,b){if(a.completed!==b.completed)return a.completed?1:-1;var o={red:0,orange:1,green:2};return o[a.priority]-o[b.priority]});if(dutyFilter==="pending")return s.filter(function(d){return!d.completed});if(dutyFilter==="completed")return s.filter(function(d){return d.completed});return s},[duties,dutyFilter]);
   var pendingCount=duties.filter(function(d){return!d.completed}).length;
 
-  /* ═══ MEETING CRUD ═══ */
+  /* ═══ MEETING CRUD (✅ 刪記錄 = 刪 Drive 檔案) ═══ */
   function addMeet(){if(!mfTitle.trim())return;if(mfEditId){setMeetings(function(p){return p.map(function(m){return m.id===mfEditId?Object.assign({},m,{title:mfTitle,date:mfDate,time:mfTime,files:mfFiles}):m})})}else{setMeetings(function(p){return p.concat([{id:gid(),title:mfTitle,date:mfDate,time:mfTime,files:mfFiles,createdAt:new Date().toISOString()}])})}resetMF()}
   function resetMF(){setMFT("");setMFD("");setMFTm("");setMFF([]);setMFE(null);setSMF(false)}
   function editMeet(m){setMFT(m.title);setMFD(m.date);setMFTm(m.time);setMFF(m.files||[]);setMFE(m.id);setSMF(true)}
-  function delMeet(id){setMeetings(function(p){return p.filter(function(m){return m.id!==id})})}
+  function delMeet(id){
+    var m=meetings.find(function(x){return x.id===id});
+    if(m)deleteDriveFiles(m.files);
+    setMeetings(function(p){return p.filter(function(x){return x.id!==id})})
+  }
   async function onMeetFile(e){var fs=await doUploadFiles(e.target.files);setMFF(function(p){return p.concat(fs)});e.target.value=""}
   var sMeetings=useMemo(function(){return meetings.slice().sort(function(a,b){var da=new Date(a.date+" "+(a.time||"00:00"));var db=new Date(b.date+" "+(b.time||"00:00"));return da-db})},[meetings]);
 
@@ -208,13 +216,20 @@ function App(){
   var fIt=useMemo(function(){var s=itItems.slice().sort(function(a,b){if(a.completed!==b.completed)return a.completed?1:-1;if(a.deadline&&b.deadline)return new Date(a.deadline)-new Date(b.deadline);return 0});if(itFilter==="pending")return s.filter(function(i){return!i.completed});if(itFilter==="completed")return s.filter(function(i){return i.completed});return s},[itItems,itFilter]);
   var itPending=itItems.filter(function(i){return!i.completed}).length;
 
-  /* ═══ STAFF CRUD ═══ */
+  /* ═══ STAFF CRUD (✅ 刪記錄 / 移除同事 = 刪 Drive 檔案) ═══ */
   function addStaff2(){if(!newSN.trim()||staffList.includes(newSN.trim()))return;var u=staffList.concat([newSN.trim()]);setSL(u);setNSN("");if(!selStaff)setSS(newSN.trim())}
-  function rmStaff(n){setSL(function(p){return p.filter(function(x){return x!==n})});var ni=Object.assign({},staffIssues);delete ni[n];setSI(ni);if(selStaff===n)setSS("")}
+  function rmStaff(n){
+    (staffIssues[n]||[]).forEach(function(iss){deleteDriveFiles(iss.files)});
+    setSL(function(p){return p.filter(function(x){return x!==n})});var ni=Object.assign({},staffIssues);delete ni[n];setSI(ni);if(selStaff===n)setSS("")
+  }
   function addIssue(){if(!siTitle.trim()||!selStaff)return;if(siEditId){setSI(function(p){var ni=Object.assign({},p);ni[selStaff]=(ni[selStaff]||[]).map(function(i){return i.id===siEditId?Object.assign({},i,{title:siTitle,desc:siDesc,date:siDate,files:siFiles}):i});return ni})}else{setSI(function(p){var ni=Object.assign({},p);ni[selStaff]=[{id:gid(),title:siTitle,desc:siDesc,date:siDate,files:siFiles,createdAt:new Date().toISOString()}].concat(ni[selStaff]||[]);return ni})}resetSIF()}
   function resetSIF(){setSIT("");setSID("");setSIDate("");setSIFiles([]);setSIE(null);setSSIF(false)}
   function editIssue(i){setSIT(i.title);setSID(i.desc);setSIDate(i.date||"");setSIFiles(i.files||[]);setSIE(i.id);setSSIF(true)}
-  function delIssue(sn,id){setSI(function(p){var ni=Object.assign({},p);ni[sn]=(ni[sn]||[]).filter(function(i){return i.id!==id});return ni})}
+  function delIssue(sn,id){
+    var iss=(staffIssues[sn]||[]).find(function(x){return x.id===id});
+    if(iss)deleteDriveFiles(iss.files);
+    setSI(function(p){var ni=Object.assign({},p);ni[sn]=(ni[sn]||[]).filter(function(i){return i.id!==id});return ni})
+  }
   async function onSIFile(e){var fs=await doUploadFiles(e.target.files);setSIFiles(function(p){return p.concat(fs)});e.target.value=""}
   var curIssues=selStaff?(staffIssues[selStaff]||[]):[];
   var totalIssues=Object.values(staffIssues).reduce(function(s,a){return s+a.length},0);
@@ -284,7 +299,7 @@ function App(){
         <div><label className="text-xs font-bold text-gray-500 mb-1 block">📅 日期</label><input type="date" value={mfDate} onChange={function(e){setMFD(e.target.value)}} className={IC}/></div>
         <div><label className="text-xs font-bold text-gray-500 mb-1 block">🕐 時間</label><input type="time" value={mfTime} onChange={function(e){setMFTm(e.target.value)}} className={IC}/></div>
       </div>
-      <div><label className="text-xs font-bold text-gray-500 mb-1 block">📎 附件（PDF / 相片）</label><input ref={meetRef} type="file" accept="image/*,application/pdf" multiple onChange={onMeetFile} className="hidden"/><UploadBtn inputRef={meetRef} uploading={uploading} label="📎 選擇檔案"/><FileThumb files={mfFiles} onView={function(f){setPF(f)}} onRemove={function(fid){setMFF(function(p){return p.filter(function(f){return(f.id||f.driveFileId)!==fid})});}}/></div>
+      <div><label className="text-xs font-bold text-gray-500 mb-1 block">📎 附件（PDF / 相片）</label><input ref={meetRef} type="file" accept="image/*,application/pdf" multiple onChange={onMeetFile} className="hidden"/><UploadBtn inputRef={meetRef} uploading={uploading} label="📎 選擇檔案"/><FileThumb files={mfFiles} onView={function(f){setPF(f)}} onRemove={function(fid){deleteDriveFile(fid);setMFF(function(p){return p.filter(function(f){return(f.id||f.driveFileId)!==fid})})}}/></div>
       <div className="flex gap-2"><button onClick={addMeet} className={"flex-1 "+BTN}>{mfEditId?"✓ 儲存":"+ 新增會議"}</button><button onClick={resetMF} className={BTN2}>取消</button></div>
     </div>}
     {sMeetings.length===0?<Empty icon="📅" title="未有會議" sub="撳「新增」加入會議安排"/>:
@@ -357,7 +372,7 @@ function App(){
         <input value={siTitle} onChange={function(e){setSIT(e.target.value)}} placeholder="問題 / 事項標題..." className={IC} autoFocus/>
         <textarea value={siDesc} onChange={function(e){setSID(e.target.value)}} placeholder="詳細描述（選填）..." rows={2} className={IC}/>
         <div><label className="text-xs font-bold text-gray-500 mb-1 block">📅 日期</label><input type="date" value={siDate} onChange={function(e){setSIDate(e.target.value)}} className={IC}/></div>
-        <div><label className="text-xs font-bold text-gray-500 mb-1 block">📎 附件（PDF / 相片）</label><input ref={siRef} type="file" accept="image/*,application/pdf" multiple onChange={onSIFile} className="hidden"/><UploadBtn inputRef={siRef} uploading={uploading} label="📎 選擇檔案"/><FileThumb files={siFiles} onView={function(f){setPF(f)}} onRemove={function(fid){setSIFiles(function(p){return p.filter(function(f){return(f.id||f.driveFileId)!==fid})})}}/></div>
+        <div><label className="text-xs font-bold text-gray-500 mb-1 block">📎 附件（PDF / 相片）</label><input ref={siRef} type="file" accept="image/*,application/pdf" multiple onChange={onSIFile} className="hidden"/><UploadBtn inputRef={siRef} uploading={uploading} label="📎 選擇檔案"/><FileThumb files={siFiles} onView={function(f){setPF(f)}} onRemove={function(fid){deleteDriveFile(fid);setSIFiles(function(p){return p.filter(function(f){return(f.id||f.driveFileId)!==fid})})}}/></div>
         <div className="flex gap-2"><button onClick={addIssue} className={"flex-1 "+BTN}>{siEditId?"✓ 儲存":"+ 新增"}</button><button onClick={resetSIF} className={BTN2}>取消</button></div>
       </div>}
       {curIssues.length===0?<Empty icon="📝" title={"「"+selStaff+"」未有記錄"} sub="撳「新增」開始記錄"/>:
