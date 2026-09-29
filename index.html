@@ -2,7 +2,7 @@
 <html lang="zh-HK">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
   <title>Work Dashboard</title>
   <script src="https://cdn.tailwindcss.com"></script>
@@ -10,7 +10,10 @@
   <script crossorigin src="https://unpkg.com/react-dom@18.2.0/umd/react-dom.production.min.js"></script>
   <script src="https://unpkg.com/@babel/standalone@7.24.0/babel.min.js"></script>
   <style>
-    body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;-webkit-tap-highlight-color:transparent}
+    html{overflow-x:hidden;height:100%;overscroll-behavior:none}
+    body{margin:0;overflow-x:hidden;height:100%;overscroll-behavior:none;
+      font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+      -webkit-tap-highlight-color:transparent;-webkit-overflow-scrolling:touch}
     .hideScroll::-webkit-scrollbar{display:none}
     .hideScroll{-ms-overflow-style:none;scrollbar-width:none}
     @keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
@@ -21,6 +24,10 @@
     .spin{animation:spin .8s linear infinite}
     .line-clamp-2{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
     input[type="date"],input[type="time"]{min-height:44px}
+    .hdr-bg{background:linear-gradient(135deg,#818cf8,#6366f1,#7c3aed);
+      -webkit-backface-visibility:hidden;backface-visibility:hidden;
+      transform:translate3d(0,0,0);will-change:transform}
+    .hdr-circle{pointer-events:none}
   </style>
 </head>
 <body>
@@ -28,31 +35,14 @@
 <script type="text/babel">
 var{useState,useRef,useMemo,useEffect}=React;
 
-/* ══════════ CONFIG ══════════ */
-var API_URL = "https://script.google.com/macros/s/AKfycbyZrP3PBIJvZaG9PJwO58uctQAbp6FYN8NOAtqFe1Q9csfeVDj5XVf0DylKo8jIRNzRdQ/exec";
+var API_URL="https://script.google.com/macros/s/AKfycbyZrP3PBIJvZaG9PJwO58uctQAbp6FYN8NOAtqFe1Q9csfeVDj5XVf0DylKo8jIRNzRdQ/exec";
 
-/* ══════════ API HELPERS ══════════ */
-async function apiGet(){
-  try{var r=await fetch(API_URL+"?t="+Date.now());var t=await r.text();return JSON.parse(t)}
-  catch(e){console.error("GET err:",e);return{success:false,error:e.message}}
-}
-async function apiPost(data){
-  try{var r=await fetch(API_URL,{method:"POST",headers:{"Content-Type":"text/plain;charset=utf-8"},body:JSON.stringify(data)});var t=await r.text();return JSON.parse(t)}
-  catch(e){console.error("POST err:",e);return{success:false,error:e.message}}
-}
-async function uploadFileToDrive(file){
-  var dataUrl=await new Promise(function(res){var r=new FileReader();r.onload=function(e){res(e.target.result)};r.readAsDataURL(file)});
-  var base64=dataUrl.split(",")[1];
-  var resp=await apiPost({action:"uploadFile",fileName:file.name,mimeType:file.type,base64Data:base64});
-  if(resp&&resp.success)return{id:resp.data.driveFileId,name:resp.data.name,type:resp.data.type,driveFileId:resp.data.driveFileId,viewUrl:resp.data.viewUrl,downloadUrl:resp.data.downloadUrl,isImg:resp.data.isImg,isPdf:resp.data.isPdf};
-  return null;
-}
-
-/* ══════════ DRIVE DELETE HELPER ══════════ */
+async function apiGet(){try{var r=await fetch(API_URL+"?t="+Date.now());var t=await r.text();return JSON.parse(t)}catch(e){console.error("GET err:",e);return{success:false,error:e.message}}}
+async function apiPost(data){try{var r=await fetch(API_URL,{method:"POST",headers:{"Content-Type":"text/plain;charset=utf-8"},body:JSON.stringify(data)});var t=await r.text();return JSON.parse(t)}catch(e){console.error("POST err:",e);return{success:false,error:e.message}}}
+async function uploadFileToDrive(file){var dataUrl=await new Promise(function(res){var r=new FileReader();r.onload=function(e){res(e.target.result)};r.readAsDataURL(file)});var base64=dataUrl.split(",")[1];var resp=await apiPost({action:"uploadFile",fileName:file.name,mimeType:file.type,base64Data:base64});if(resp&&resp.success)return{id:resp.data.driveFileId,name:resp.data.name,type:resp.data.type,driveFileId:resp.data.driveFileId,viewUrl:resp.data.viewUrl,downloadUrl:resp.data.downloadUrl,isImg:resp.data.isImg,isPdf:resp.data.isPdf};return null}
 function deleteDriveFile(fid){apiPost({action:"deleteFile",driveFileId:fid})}
 function deleteDriveFiles(files){if(files&&files.length)files.forEach(function(f){deleteDriveFile(f.driveFileId||f.id)})}
 
-/* ══════════ HELPERS ══════════ */
 function gid(){return Date.now().toString(36)+Math.random().toString(36).substr(2,6)}
 function fmtDate(s){if(!s)return"";var d=new Date(s);var wd=["日","一","二","三","四","五","六"];return(d.getMonth()+1)+"月"+d.getDate()+"日（"+wd[d.getDay()]+"）"}
 function fmtTime(s){if(!s)return"";var p=s.split(":");return p[0]+":"+p[1]}
@@ -67,6 +57,9 @@ var BTN2="bg-gray-100 text-gray-500 font-bold px-4 py-3 rounded-xl";
 /* ══════════ SHARED COMPONENTS ══════════ */
 function Empty({icon,title,sub}){return<div className="bg-white rounded-2xl p-10 text-center border-2 border-dashed border-gray-200 fadeIn"><div className="text-5xl mb-3">{icon||"📭"}</div><div className="text-base font-bold text-gray-400 mb-1">{title||"未有資料"}</div>{sub&&<div className="text-sm text-gray-300">{sub}</div>}</div>}
 function DLBadge({dl}){var info=deadlineInfo(dl);if(!info)return null;return<span className={"inline-flex items-center gap-1 text-xs font-bold px-2 py-0.5 rounded-full border "+info.c}>{info.ic} {info.t}</span>}
+
+/* ★ 可清除日期輸入 */
+function ClearDate({value,onChange,cls}){return<div className="flex gap-2 items-center"><input type="date" value={value} onChange={function(e){onChange(e.target.value)}} className={(cls||IC)+" flex-1"}/>{value&&<button type="button" onClick={function(){onChange("")}} className="shrink-0 w-10 h-10 rounded-xl bg-gray-100 text-gray-400 flex items-center justify-center text-sm hover:bg-red-50 hover:text-red-400 active:scale-95 transition-all">✕</button>}</div>}
 
 function FileThumb({files,onView,onRemove}){if(!files||files.length===0)return null;return<div className="flex gap-2 flex-wrap mt-2.5">{files.map(function(f){return<div key={f.id||f.driveFileId} className="relative group"><button onClick={function(){onView(f)}} className="w-16 h-16 rounded-xl border-2 border-gray-200 overflow-hidden bg-gray-50 flex items-center justify-center hover:border-indigo-300 active:scale-95 transition-all">{f.isImg?<img src={f.viewUrl} className="w-full h-full object-cover" onError={function(e){e.target.style.display="none"}}/>:<div className="flex flex-col items-center"><span className="text-2xl">📄</span><span className="text-gray-400 truncate w-14 text-center" style={{fontSize:7}}>{f.name}</span></div>}</button>{onRemove&&<button onClick={function(){onRemove(f.id||f.driveFileId)}} className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-red-400 text-white text-xs flex items-center justify-center shadow">✕</button>}</div>})}</div>}
 
@@ -91,7 +84,6 @@ function App(){
   var[previewFile,setPF]=useState(null);
   var[confirmDel,setCD]=useState(null);
 
-  /* ── Duty ── */
   var[duties,setDuties]=useState([]);
   var[dutySubTab,setDST]=useState("tasks");
   var[showDF,setSDF]=useState(false);
@@ -103,13 +95,11 @@ function App(){
   var[mfTitle,setMFT]=useState("");var[mfDate,setMFD]=useState("");var[mfTime,setMFTm]=useState("");var[mfFiles,setMFF]=useState([]);var[mfEditId,setMFE]=useState(null);
   var meetRef=useRef(null);
 
-  /* ── IT ── */
   var[itItems,setIT]=useState([]);
   var[showIF,setSIF]=useState(false);
   var[ifTitle,setIFT]=useState("");var[ifDesc,setIFD]=useState("");var[ifDL,setIFDL]=useState("");var[ifEditId,setIFE]=useState(null);
   var[itFilter,setITF]=useState("pending");
 
-  /* ── Staff ── */
   var[staffList,setSL]=useState([]);
   var[newSN,setNSN]=useState("");
   var[selStaff,setSS]=useState("");
@@ -118,133 +108,110 @@ function App(){
   var[siTitle,setSIT]=useState("");var[siDesc,setSID]=useState("");var[siDate,setSIDate]=useState("");var[siFiles,setSIFiles]=useState([]);var[siEditId,setSIE]=useState(null);
   var siRef=useRef(null);
 
-  /* ── Notes ── */
   var[notes,setNotes]=useState([]);
   var[showNF,setSNF]=useState(false);
   var[nfTitle,setNFT]=useState("");var[nfContent,setNFC]=useState("");var[nfEditId,setNFE]=useState(null);
   var[expandedNote,setEN]=useState({});
 
-  /* ── Debounced Save ── */
   function schedSave(key,action,payload){
     if(saveTimers.current[key])clearTimeout(saveTimers.current[key]);
     setSyncing(true);
     saveTimers.current[key]=setTimeout(function(){
       apiPost(Object.assign({action:action},payload)).then(function(resp){
-        setSyncing(false);
-        if(resp&&resp.success)setLastSaved(new Date());
+        setSyncing(false);if(resp&&resp.success)setLastSaved(new Date());
       });
     },1500);
   }
 
-  /* ── Load on mount ── */
   useEffect(function(){
     apiGet().then(function(resp){
-      if(resp&&resp.success){
-        var d=resp.data;
-        setDuties(d.duties||[]);
-        setMeetings(d.meetings||[]);
-        setIT(d.it||[]);
-        setSL(d.staffList||[]);
-        setSI(d.staffIssues||{});
-        var ns=(d.notes||[]).slice().sort(function(a,b){return(a.sortOrder||0)-(b.sortOrder||0)});
-        setNotes(ns);
-      }else{
-        setLoadErr("載入失敗，請檢查 API URL");
-      }
-      setLoaded(true);
+      if(resp&&resp.success){var d=resp.data;setDuties(d.duties||[]);setMeetings(d.meetings||[]);setIT(d.it||[]);setSL(d.staffList||[]);setSI(d.staffIssues||{});var ns=(d.notes||[]).slice().sort(function(a,b){return(a.sortOrder||0)-(b.sortOrder||0)});setNotes(ns)}else{setLoadErr("載入失敗，請檢查 API URL")}setLoaded(true);
     });
   },[]);
 
-  /* ── Auto-save effects ── */
   useEffect(function(){if(!loaded)return;schedSave("duties","saveDuties",{items:duties})},[duties]);
   useEffect(function(){if(!loaded)return;schedSave("meetings","saveMeetings",{items:meetings})},[meetings]);
   useEffect(function(){if(!loaded)return;schedSave("it","saveIT",{items:itItems})},[itItems]);
   useEffect(function(){if(!loaded)return;schedSave("staffList","saveStaffList",{list:staffList})},[staffList]);
-  useEffect(function(){
-    if(!loaded)return;
-    var items=[];
-    Object.keys(staffIssues).forEach(function(name){
-      (staffIssues[name]||[]).forEach(function(iss){items.push(Object.assign({staffName:name},iss))});
-    });
-    schedSave("staffIssues","saveStaffIssues",{items:items});
-  },[staffIssues]);
-  useEffect(function(){
-    if(!loaded)return;
-    var items=notes.map(function(n,i){return Object.assign({},n,{sortOrder:i})});
-    schedSave("notes","saveNotes",{items:items});
-  },[notes]);
+  useEffect(function(){if(!loaded)return;var items=[];Object.keys(staffIssues).forEach(function(name){(staffIssues[name]||[]).forEach(function(iss){items.push(Object.assign({staffName:name},iss))})});schedSave("staffIssues","saveStaffIssues",{items:items})},[staffIssues]);
+  useEffect(function(){if(!loaded)return;var items=notes.map(function(n,i){return Object.assign({},n,{sortOrder:i})});schedSave("notes","saveNotes",{items:items})},[notes]);
 
-  /* ── File upload wrapper ── */
-  async function doUploadFiles(fileList){
-    setUploading(true);
-    var results=[];
-    for(var i=0;i<fileList.length;i++){
-      var f=await uploadFileToDrive(fileList[i]);
-      if(f)results.push(f);
-    }
-    setUploading(false);
-    return results;
-  }
+  async function doUploadFiles(fileList){setUploading(true);var results=[];for(var i=0;i<fileList.length;i++){var f=await uploadFileToDrive(fileList[i]);if(f)results.push(f)}setUploading(false);return results}
 
-  /* ═══ DUTY CRUD ═══ */
+  /* ═══ DUTY ═══ */
   function addDuty(){if(!dfTitle.trim())return;if(dfEditId){setDuties(function(p){return p.map(function(d){return d.id===dfEditId?Object.assign({},d,{title:dfTitle,desc:dfDesc,deadline:dfDL,priority:dfPri}):d})})}else{setDuties(function(p){return[{id:gid(),title:dfTitle,desc:dfDesc,deadline:dfDL,priority:dfPri,completed:false,createdAt:new Date().toISOString()}].concat(p)})}resetDF()}
   function resetDF(){setDFT("");setDFD("");setDFDL("");setDFP("green");setDFE(null);setSDF(false)}
-  function editDuty(d){setDFT(d.title);setDFD(d.desc);setDFDL(d.deadline);setDFP(d.priority);setDFE(d.id);setSDF(true)}
+  function editDuty(d){setDFT(d.title);setDFD(d.desc||"");setDFDL(d.deadline||"");setDFP(d.priority);setDFE(d.id);setSDF(true)}
   function toggleDuty(id){setDuties(function(p){return p.map(function(d){return d.id===id?Object.assign({},d,{completed:!d.completed}):d})})}
   function delDuty(id){setDuties(function(p){return p.filter(function(d){return d.id!==id})})}
-  var fDuties=useMemo(function(){var s=duties.slice().sort(function(a,b){if(a.completed!==b.completed)return a.completed?1:-1;var o={red:0,orange:1,green:2};return o[a.priority]-o[b.priority]});if(dutyFilter==="pending")return s.filter(function(d){return!d.completed});if(dutyFilter==="completed")return s.filter(function(d){return d.completed});return s},[duties,dutyFilter]);
+
+  /* ★ 排序：完成→底 · 優先級→高先 · 有deadline→先 · 無deadline→最底 */
+  var fDuties=useMemo(function(){
+    var s=duties.slice().sort(function(a,b){
+      if(a.completed!==b.completed)return a.completed?1:-1;
+      var o={red:0,orange:1,green:2};
+      var pd=o[a.priority]-o[b.priority];if(pd!==0)return pd;
+      if(a.deadline&&!b.deadline)return-1;
+      if(!a.deadline&&b.deadline)return 1;
+      if(a.deadline&&b.deadline)return new Date(a.deadline)-new Date(b.deadline);
+      return 0;
+    });
+    if(dutyFilter==="pending")return s.filter(function(d){return!d.completed});
+    if(dutyFilter==="completed")return s.filter(function(d){return d.completed});
+    return s;
+  },[duties,dutyFilter]);
   var pendingCount=duties.filter(function(d){return!d.completed}).length;
 
-  /* ═══ MEETING CRUD ═══ */
+  /* ═══ MEETING ═══ */
   function addMeet(){if(!mfTitle.trim())return;if(mfEditId){setMeetings(function(p){return p.map(function(m){return m.id===mfEditId?Object.assign({},m,{title:mfTitle,date:mfDate,time:mfTime,files:mfFiles}):m})})}else{setMeetings(function(p){return p.concat([{id:gid(),title:mfTitle,date:mfDate,time:mfTime,files:mfFiles,createdAt:new Date().toISOString()}])})}resetMF()}
   function resetMF(){setMFT("");setMFD("");setMFTm("");setMFF([]);setMFE(null);setSMF(false)}
-  function editMeet(m){setMFT(m.title);setMFD(m.date);setMFTm(m.time);setMFF(m.files||[]);setMFE(m.id);setSMF(true)}
-  function delMeet(id){
-    var m=meetings.find(function(x){return x.id===id});
-    if(m)deleteDriveFiles(m.files);
-    setMeetings(function(p){return p.filter(function(x){return x.id!==id})})
-  }
+  function editMeet(m){setMFT(m.title);setMFD(m.date||"");setMFTm(m.time||"");setMFF(m.files||[]);setMFE(m.id);setSMF(true)}
+  function delMeet(id){var m=meetings.find(function(x){return x.id===id});if(m)deleteDriveFiles(m.files);setMeetings(function(p){return p.filter(function(x){return x.id!==id})})}
   async function onMeetFile(e){var fs=await doUploadFiles(e.target.files);setMFF(function(p){return p.concat(fs)});e.target.value=""}
   var sMeetings=useMemo(function(){return meetings.slice().sort(function(a,b){var da=new Date(a.date+" "+(a.time||"00:00"));var db=new Date(b.date+" "+(b.time||"00:00"));return da-db})},[meetings]);
 
-  /* ═══ IT CRUD ═══ */
+  /* ═══ IT ═══ */
   function addIt(){if(!ifTitle.trim())return;if(ifEditId){setIT(function(p){return p.map(function(i){return i.id===ifEditId?Object.assign({},i,{title:ifTitle,desc:ifDesc,deadline:ifDL}):i})})}else{setIT(function(p){return[{id:gid(),title:ifTitle,desc:ifDesc,deadline:ifDL,completed:false,createdAt:new Date().toISOString()}].concat(p)})}resetIF()}
   function resetIF(){setIFT("");setIFD("");setIFDL("");setIFE(null);setSIF(false)}
-  function editIt(i){setIFT(i.title);setIFD(i.desc);setIFDL(i.deadline);setIFE(i.id);setSIF(true)}
+  function editIt(i){setIFT(i.title);setIFD(i.desc||"");setIFDL(i.deadline||"");setIFE(i.id);setSIF(true)}
   function toggleIt(id){setIT(function(p){return p.map(function(i){return i.id===id?Object.assign({},i,{completed:!i.completed}):i})})}
   function delIt(id){setIT(function(p){return p.filter(function(i){return i.id!==id})})}
-  var fIt=useMemo(function(){var s=itItems.slice().sort(function(a,b){if(a.completed!==b.completed)return a.completed?1:-1;if(a.deadline&&b.deadline)return new Date(a.deadline)-new Date(b.deadline);return 0});if(itFilter==="pending")return s.filter(function(i){return!i.completed});if(itFilter==="completed")return s.filter(function(i){return i.completed});return s},[itItems,itFilter]);
+
+  /* ★ 排序：完成→底 · 有deadline→先 · 無deadline→最底 */
+  var fIt=useMemo(function(){
+    var s=itItems.slice().sort(function(a,b){
+      if(a.completed!==b.completed)return a.completed?1:-1;
+      if(a.deadline&&!b.deadline)return-1;
+      if(!a.deadline&&b.deadline)return 1;
+      if(a.deadline&&b.deadline)return new Date(a.deadline)-new Date(b.deadline);
+      return 0;
+    });
+    if(itFilter==="pending")return s.filter(function(i){return!i.completed});
+    if(itFilter==="completed")return s.filter(function(i){return i.completed});
+    return s;
+  },[itItems,itFilter]);
   var itPending=itItems.filter(function(i){return!i.completed}).length;
 
-  /* ═══ STAFF CRUD ═══ */
+  /* ═══ STAFF ═══ */
   function addStaff2(){if(!newSN.trim()||staffList.includes(newSN.trim()))return;var u=staffList.concat([newSN.trim()]);setSL(u);setNSN("");if(!selStaff)setSS(newSN.trim())}
-  function rmStaff(n){
-    (staffIssues[n]||[]).forEach(function(iss){deleteDriveFiles(iss.files)});
-    setSL(function(p){return p.filter(function(x){return x!==n})});var ni=Object.assign({},staffIssues);delete ni[n];setSI(ni);if(selStaff===n)setSS("")
-  }
+  function rmStaff(n){(staffIssues[n]||[]).forEach(function(iss){deleteDriveFiles(iss.files)});setSL(function(p){return p.filter(function(x){return x!==n})});var ni=Object.assign({},staffIssues);delete ni[n];setSI(ni);if(selStaff===n)setSS("")}
   function addIssue(){if(!siTitle.trim()||!selStaff)return;if(siEditId){setSI(function(p){var ni=Object.assign({},p);ni[selStaff]=(ni[selStaff]||[]).map(function(i){return i.id===siEditId?Object.assign({},i,{title:siTitle,desc:siDesc,date:siDate,files:siFiles}):i});return ni})}else{setSI(function(p){var ni=Object.assign({},p);ni[selStaff]=[{id:gid(),title:siTitle,desc:siDesc,date:siDate,files:siFiles,createdAt:new Date().toISOString()}].concat(ni[selStaff]||[]);return ni})}resetSIF()}
   function resetSIF(){setSIT("");setSID("");setSIDate("");setSIFiles([]);setSIE(null);setSSIF(false)}
-  function editIssue(i){setSIT(i.title);setSID(i.desc);setSIDate(i.date||"");setSIFiles(i.files||[]);setSIE(i.id);setSSIF(true)}
-  function delIssue(sn,id){
-    var iss=(staffIssues[sn]||[]).find(function(x){return x.id===id});
-    if(iss)deleteDriveFiles(iss.files);
-    setSI(function(p){var ni=Object.assign({},p);ni[sn]=(ni[sn]||[]).filter(function(i){return i.id!==id});return ni})
-  }
+  function editIssue(i){setSIT(i.title);setSID(i.desc||"");setSIDate(i.date||"");setSIFiles(i.files||[]);setSIE(i.id);setSSIF(true)}
+  function delIssue(sn,id){var iss=(staffIssues[sn]||[]).find(function(x){return x.id===id});if(iss)deleteDriveFiles(iss.files);setSI(function(p){var ni=Object.assign({},p);ni[sn]=(ni[sn]||[]).filter(function(i){return i.id!==id});return ni})}
   async function onSIFile(e){var fs=await doUploadFiles(e.target.files);setSIFiles(function(p){return p.concat(fs)});e.target.value=""}
   var curIssues=selStaff?(staffIssues[selStaff]||[]):[];
   var totalIssues=Object.values(staffIssues).reduce(function(s,a){return s+a.length},0);
 
-  /* ═══ NOTES CRUD ═══ */
+  /* ═══ NOTES ═══ */
   function addNote2(){if(!nfTitle.trim())return;if(nfEditId){setNotes(function(p){return p.map(function(n){return n.id===nfEditId?Object.assign({},n,{title:nfTitle,content:nfContent}):n})})}else{setNotes(function(p){return p.concat([{id:gid(),title:nfTitle,content:nfContent,createdAt:new Date().toISOString()}])})}resetNF()}
   function resetNF(){setNFT("");setNFC("");setNFE(null);setSNF(false)}
   function editNote2(n){setNFT(n.title);setNFC(n.content);setNFE(n.id);setSNF(true)}
   function delNote(id){setNotes(function(p){return p.filter(function(n){return n.id!==id})})}
   function moveNote(id,dir){setNotes(function(p){var idx=p.findIndex(function(n){return n.id===id});if(idx<0)return p;var ni=idx+dir;if(ni<0||ni>=p.length)return p;var a=p.slice();var tmp=a[idx];a[idx]=a[ni];a[ni]=tmp;return a})}
 
-  /* ═══ RENDER TABS ═══ */
   var TABS=[{id:"duty",icon:"📋",label:"Duty",count:pendingCount+meetings.length},{id:"it",icon:"💻",label:"IT",count:itPending},{id:"staff",icon:"👥",label:"同事",count:totalIssues},{id:"notes",icon:"📌",label:"公司需知",count:notes.length}];
 
-  /* ── LOADING SCREEN ── */
   if(!loaded){return<div className="min-h-screen flex flex-col items-center justify-center bg-gray-50"><div className="text-5xl mb-4 pulse2">📋</div><div className="text-base font-bold text-gray-400">{loadErr||"載入中..."}</div>{loadErr&&<button onClick={function(){location.reload()}} className={"mt-4 "+BTN}>重試</button>}</div>}
 
   /* ──────── DUTY TAB ──────── */
@@ -254,13 +221,12 @@ function App(){
     {dutySubTab==="meetings"&&renderMeetings()}
   </div>}
 
-  /* ★ 修正：Deadline + 優先級改為上下排列，手機唔再錯位 */
   function renderDutyTasks(){return<div className="space-y-3 fadeIn">
     <SectionHeader icon="📝" title="待辦事項" count={pendingCount} action={function(){resetDF();setSDF(!showDF)}} actionLabel={showDF?"收起":"新增"}/>
     {showDF&&<div className="bg-white rounded-2xl p-4 shadow-sm border-2 border-indigo-200 space-y-3 fadeIn">
       <input value={dfTitle} onChange={function(e){setDFT(e.target.value)}} placeholder="任務標題..." className={IC} autoFocus/>
       <textarea value={dfDesc} onChange={function(e){setDFD(e.target.value)}} placeholder="描述（選填）..." rows={2} className={IC}/>
-      <div><label className="text-xs font-bold text-gray-500 mb-1 block">⏰ Deadline</label><input type="date" value={dfDL} onChange={function(e){setDFDL(e.target.value)}} className={IC}/></div>
+      <div><label className="text-xs font-bold text-gray-500 mb-1 block">⏰ Deadline（選填）</label><ClearDate value={dfDL} onChange={setDFDL}/></div>
       <div><label className="text-xs font-bold text-gray-500 mb-1 block">🔥 優先級</label><div className="flex gap-2">{["red","orange","green"].map(function(p){return<button key={p} onClick={function(){setDFP(p)}} className={"flex-1 py-3 rounded-xl text-sm font-bold border-2 transition-all "+(dfPri===p?PRI[p].bg+" "+PRI[p].bd+" ring-2 "+PRI[p].ring:"bg-gray-50 border-gray-200 text-gray-400")}>{PRI[p].l}</button>})}</div></div>
       <div className="flex gap-2"><button onClick={addDuty} className={"flex-1 "+BTN}>{dfEditId?"✓ 儲存":"+ 新增"}</button><button onClick={resetDF} className={BTN2}>取消</button></div>
     </div>}
@@ -277,7 +243,7 @@ function App(){
               {d.desc&&<div className={"text-xs mb-1.5 line-clamp-2 "+(d.completed?"text-gray-300":"text-gray-500")}>{d.desc}</div>}
               <div className="flex items-center gap-2 flex-wrap">
                 <span className={"text-xs font-bold px-2 py-0.5 rounded-full "+pri.badge}>{pri.l}</span>
-                {d.deadline&&<DLBadge dl={d.deadline}/>}
+                {d.deadline?<DLBadge dl={d.deadline}/>:!d.completed&&<span className="text-xs font-bold px-2 py-0.5 rounded-full bg-gray-100 text-gray-400 border border-gray-200">⏳ 無期限</span>}
               </div>
             </div>
             <div className="flex flex-col gap-1 shrink-0">
@@ -294,10 +260,8 @@ function App(){
     <SectionHeader icon="📅" title="會議時間表" count={meetings.length} action={function(){resetMF();setSMF(!showMF)}} actionLabel={showMF?"收起":"新增"}/>
     {showMF&&<div className="bg-white rounded-2xl p-4 shadow-sm border-2 border-indigo-200 space-y-3 fadeIn">
       <input value={mfTitle} onChange={function(e){setMFT(e.target.value)}} placeholder="會議主題..." className={IC} autoFocus/>
-      <div className="grid grid-cols-2 gap-3">
-        <div><label className="text-xs font-bold text-gray-500 mb-1 block">📅 日期</label><input type="date" value={mfDate} onChange={function(e){setMFD(e.target.value)}} className={IC}/></div>
-        <div><label className="text-xs font-bold text-gray-500 mb-1 block">🕐 時間</label><input type="time" value={mfTime} onChange={function(e){setMFTm(e.target.value)}} className={IC}/></div>
-      </div>
+      <div><label className="text-xs font-bold text-gray-500 mb-1 block">📅 日期</label><ClearDate value={mfDate} onChange={setMFD}/></div>
+      <div><label className="text-xs font-bold text-gray-500 mb-1 block">🕐 時間</label><div className="flex gap-2 items-center"><input type="time" value={mfTime} onChange={function(e){setMFTm(e.target.value)}} className={IC+" flex-1"}/>{mfTime&&<button onClick={function(){setMFTm("")}} className="shrink-0 w-10 h-10 rounded-xl bg-gray-100 text-gray-400 flex items-center justify-center text-sm hover:bg-red-50 hover:text-red-400 active:scale-95">✕</button>}</div></div>
       <div><label className="text-xs font-bold text-gray-500 mb-1 block">📎 附件（PDF / 相片）</label><input ref={meetRef} type="file" accept="image/*,application/pdf" multiple onChange={onMeetFile} className="hidden"/><UploadBtn inputRef={meetRef} uploading={uploading} label="📎 選擇檔案"/><FileThumb files={mfFiles} onView={function(f){setPF(f)}} onRemove={function(fid){deleteDriveFile(fid);setMFF(function(p){return p.filter(function(f){return(f.id||f.driveFileId)!==fid})})}}/></div>
       <div className="flex gap-2"><button onClick={addMeet} className={"flex-1 "+BTN}>{mfEditId?"✓ 儲存":"+ 新增會議"}</button><button onClick={resetMF} className={BTN2}>取消</button></div>
     </div>}
@@ -330,7 +294,7 @@ function App(){
     {showIF&&<div className="bg-white rounded-2xl p-4 shadow-sm border-2 border-cyan-200 space-y-3 fadeIn">
       <input value={ifTitle} onChange={function(e){setIFT(e.target.value)}} placeholder="事項標題..." className={IC} autoFocus/>
       <textarea value={ifDesc} onChange={function(e){setIFD(e.target.value)}} placeholder="詳細描述（選填）..." rows={2} className={IC}/>
-      <div><label className="text-xs font-bold text-gray-500 mb-1 block">⏰ Deadline</label><input type="date" value={ifDL} onChange={function(e){setIFDL(e.target.value)}} className={IC}/></div>
+      <div><label className="text-xs font-bold text-gray-500 mb-1 block">⏰ Deadline（選填）</label><ClearDate value={ifDL} onChange={setIFDL}/></div>
       <div className="flex gap-2"><button onClick={addIt} className={"flex-1 "+BTN}>{ifEditId?"✓ 儲存":"+ 新增"}</button><button onClick={resetIF} className={BTN2}>取消</button></div>
     </div>}
     <div className="flex gap-1.5 overflow-x-auto hideScroll">{[{k:"pending",l:"⏳ 進行中"},{k:"all",l:"全部"},{k:"completed",l:"✅ 已完成"}].map(function(f){return<button key={f.k} onClick={function(){setITF(f.k)}} className={itFilter===f.k?"px-3.5 py-2 rounded-lg text-xs font-bold bg-white text-cyan-600 shadow-sm border border-cyan-200":"px-3.5 py-2 rounded-lg text-xs font-bold bg-gray-50 text-gray-400 border border-gray-200"}>{f.l}</button>})}</div>
@@ -344,7 +308,7 @@ function App(){
             <div className="flex-1 min-w-0">
               <div className={"text-sm font-bold mb-0.5 "+(i.completed?"text-gray-400 line-through":"text-gray-800")}>{i.title}</div>
               {i.desc&&<div className={"text-xs mb-1.5 line-clamp-2 "+(i.completed?"text-gray-300":"text-gray-500")}>{i.desc}</div>}
-              {i.deadline&&<DLBadge dl={i.deadline}/>}
+              {i.deadline?<DLBadge dl={i.deadline}/>:!i.completed&&<span className="text-xs font-bold px-2 py-0.5 rounded-full bg-gray-100 text-gray-400 border border-gray-200">⏳ 無期限</span>}
             </div>
             <div className="flex flex-col gap-1 shrink-0">
               <button onClick={function(){editIt(i)}} className="w-8 h-8 rounded-lg bg-gray-50 flex items-center justify-center text-gray-400">✏️</button>
@@ -364,13 +328,12 @@ function App(){
       {staffList.length===0?<div className="text-sm text-gray-300 text-center py-3">未有同事，請先加入名單</div>:
       <div className="flex gap-2 overflow-x-auto hideScroll pb-1">{staffList.map(function(n){var cnt=(staffIssues[n]||[]).length;return<div key={n} className="relative shrink-0"><button onClick={function(){setSS(n);setSSIF(false);setSIE(null)}} className={selStaff===n?"px-4 py-2.5 rounded-xl text-sm font-bold bg-gradient-to-r from-indigo-500 to-violet-500 text-white shadow-sm":"px-4 py-2.5 rounded-xl text-sm font-bold bg-gray-100 text-gray-600 border border-gray-200"}>{n}{cnt>0&&<span className={"ml-1 text-xs px-1.5 py-0.5 rounded-full "+(selStaff===n?"bg-white bg-opacity-30":"bg-red-100 text-red-500")}>{cnt}</span>}</button><button onClick={function(){setCD({fn:function(){rmStaff(n)},title:"移除同事？",msg:"將會刪除「"+n+"」及其所有記錄"})}} className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-red-400 text-white text-xs flex items-center justify-center shadow">✕</button></div>})}</div>}
     </div>
-
     {selStaff&&<div className="space-y-3">
       <SectionHeader icon="📋" title={selStaff+" 嘅記錄"} count={curIssues.length} action={function(){resetSIF();setSSIF(!showSIF)}} actionLabel={showSIF?"收起":"新增"}/>
       {showSIF&&<div className="bg-white rounded-2xl p-4 shadow-sm border-2 border-violet-200 space-y-3 fadeIn">
         <input value={siTitle} onChange={function(e){setSIT(e.target.value)}} placeholder="問題 / 事項標題..." className={IC} autoFocus/>
         <textarea value={siDesc} onChange={function(e){setSID(e.target.value)}} placeholder="詳細描述（選填）..." rows={2} className={IC}/>
-        <div><label className="text-xs font-bold text-gray-500 mb-1 block">📅 日期</label><input type="date" value={siDate} onChange={function(e){setSIDate(e.target.value)}} className={IC}/></div>
+        <div><label className="text-xs font-bold text-gray-500 mb-1 block">📅 日期（選填）</label><ClearDate value={siDate} onChange={setSIDate}/></div>
         <div><label className="text-xs font-bold text-gray-500 mb-1 block">📎 附件（PDF / 相片）</label><input ref={siRef} type="file" accept="image/*,application/pdf" multiple onChange={onSIFile} className="hidden"/><UploadBtn inputRef={siRef} uploading={uploading} label="📎 選擇檔案"/><FileThumb files={siFiles} onView={function(f){setPF(f)}} onRemove={function(fid){deleteDriveFile(fid);setSIFiles(function(p){return p.filter(function(f){return(f.id||f.driveFileId)!==fid})})}}/></div>
         <div className="flex gap-2"><button onClick={addIssue} className={"flex-1 "+BTN}>{siEditId?"✓ 儲存":"+ 新增"}</button><button onClick={resetSIF} className={BTN2}>取消</button></div>
       </div>}
@@ -426,18 +389,17 @@ function App(){
     </div>})}</div>}
   </div>}
 
-  /* ═══ SYNC INDICATOR ═══ */
   function renderSync(){
     if(syncing)return<div className="flex items-center gap-1.5"><div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full spin"/><span className="text-xs opacity-80">同步中…</span></div>;
     if(lastSaved)return<div className="flex items-center gap-1.5"><span className="text-xs opacity-50">✓ 已儲存 {lastSaved.getHours()+":"+String(lastSaved.getMinutes()).padStart(2,"0")}</span></div>;
     return null;
   }
 
-  /* ═══ MAIN RETURN ═══ */
   return<div className="min-h-screen bg-gray-50 pb-8">
-    <div className="px-5 pt-6 pb-8 text-white relative overflow-hidden" style={{background:"linear-gradient(135deg,#818cf8,#6366f1,#7c3aed)"}}>
-      <div className="absolute top-0 right-0 w-40 h-40 bg-white opacity-10 rounded-full" style={{transform:"translate(30px,-30px)"}}/>
-      <div className="absolute bottom-0 left-0 w-24 h-24 bg-white opacity-5 rounded-full" style={{transform:"translate(-10px,10px)"}}/>
+    {/* ★ 用 hdr-bg class 防止手機背景移位 */}
+    <div className="hdr-bg px-5 pt-6 pb-8 text-white relative overflow-hidden">
+      <div className="hdr-circle absolute top-0 right-0 w-40 h-40 bg-white opacity-10 rounded-full" style={{transform:"translate(30px,-30px)"}}/>
+      <div className="hdr-circle absolute bottom-0 left-0 w-24 h-24 bg-white opacity-5 rounded-full" style={{transform:"translate(-10px,10px)"}}/>
       <div className="relative max-w-2xl mx-auto">
         <div className="text-xs opacity-70 tracking-wider mb-1">📋 WORK MANAGEMENT</div>
         <div className="text-xl font-extrabold">Work Dashboard</div>
@@ -448,7 +410,7 @@ function App(){
       </div>
     </div>
 
-    <div className="sticky top-0 z-40 bg-white border-b border-gray-200 overflow-x-auto hideScroll shadow-sm">
+    <div className="sticky top-0 z-40 bg-white border-b border-gray-200 overflow-x-auto hideScroll shadow-sm" style={{transform:"translateZ(0)"}}>
       <div className="flex gap-1 px-3 py-2" style={{minWidth:"max-content"}}>
         {TABS.map(function(t){return<button key={t.id} onClick={function(){setTab(t.id)}} className={tab===t.id?"px-4 py-2 rounded-full text-sm font-bold whitespace-nowrap bg-gradient-to-r from-indigo-500 to-violet-500 text-white shadow":"px-4 py-2 rounded-full text-sm font-bold whitespace-nowrap text-gray-500 hover:bg-gray-100"}>
           {t.icon} {t.label}
