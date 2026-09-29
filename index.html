@@ -195,7 +195,7 @@ function App(){
   var fDuties=useMemo(function(){var s=duties.slice().sort(function(a,b){if(a.completed!==b.completed)return a.completed?1:-1;var o={red:0,orange:1,green:2};return o[a.priority]-o[b.priority]});if(dutyFilter==="pending")return s.filter(function(d){return!d.completed});if(dutyFilter==="completed")return s.filter(function(d){return d.completed});return s},[duties,dutyFilter]);
   var pendingCount=duties.filter(function(d){return!d.completed}).length;
 
-  /* ═══ MEETING CRUD (✅ 刪記錄 = 刪 Drive 檔案) ═══ */
+  /* ═══ MEETING CRUD ═══ */
   function addMeet(){if(!mfTitle.trim())return;if(mfEditId){setMeetings(function(p){return p.map(function(m){return m.id===mfEditId?Object.assign({},m,{title:mfTitle,date:mfDate,time:mfTime,files:mfFiles}):m})})}else{setMeetings(function(p){return p.concat([{id:gid(),title:mfTitle,date:mfDate,time:mfTime,files:mfFiles,createdAt:new Date().toISOString()}])})}resetMF()}
   function resetMF(){setMFT("");setMFD("");setMFTm("");setMFF([]);setMFE(null);setSMF(false)}
   function editMeet(m){setMFT(m.title);setMFD(m.date);setMFTm(m.time);setMFF(m.files||[]);setMFE(m.id);setSMF(true)}
@@ -216,7 +216,7 @@ function App(){
   var fIt=useMemo(function(){var s=itItems.slice().sort(function(a,b){if(a.completed!==b.completed)return a.completed?1:-1;if(a.deadline&&b.deadline)return new Date(a.deadline)-new Date(b.deadline);return 0});if(itFilter==="pending")return s.filter(function(i){return!i.completed});if(itFilter==="completed")return s.filter(function(i){return i.completed});return s},[itItems,itFilter]);
   var itPending=itItems.filter(function(i){return!i.completed}).length;
 
-  /* ═══ STAFF CRUD (✅ 刪記錄 / 移除同事 = 刪 Drive 檔案) ═══ */
+  /* ═══ STAFF CRUD ═══ */
   function addStaff2(){if(!newSN.trim()||staffList.includes(newSN.trim()))return;var u=staffList.concat([newSN.trim()]);setSL(u);setNSN("");if(!selStaff)setSS(newSN.trim())}
   function rmStaff(n){
     (staffIssues[n]||[]).forEach(function(iss){deleteDriveFiles(iss.files)});
@@ -254,15 +254,14 @@ function App(){
     {dutySubTab==="meetings"&&renderMeetings()}
   </div>}
 
+  /* ★ 修正：Deadline + 優先級改為上下排列，手機唔再錯位 */
   function renderDutyTasks(){return<div className="space-y-3 fadeIn">
     <SectionHeader icon="📝" title="待辦事項" count={pendingCount} action={function(){resetDF();setSDF(!showDF)}} actionLabel={showDF?"收起":"新增"}/>
     {showDF&&<div className="bg-white rounded-2xl p-4 shadow-sm border-2 border-indigo-200 space-y-3 fadeIn">
       <input value={dfTitle} onChange={function(e){setDFT(e.target.value)}} placeholder="任務標題..." className={IC} autoFocus/>
       <textarea value={dfDesc} onChange={function(e){setDFD(e.target.value)}} placeholder="描述（選填）..." rows={2} className={IC}/>
-      <div className="grid grid-cols-2 gap-3">
-        <div><label className="text-xs font-bold text-gray-500 mb-1 block">⏰ Deadline</label><input type="date" value={dfDL} onChange={function(e){setDFDL(e.target.value)}} className={IC}/></div>
-        <div><label className="text-xs font-bold text-gray-500 mb-1 block">🔥 優先級</label><div className="flex gap-1.5">{["red","orange","green"].map(function(p){return<button key={p} onClick={function(){setDFP(p)}} className={"flex-1 py-2.5 rounded-xl text-xs font-bold border-2 transition-all "+(dfPri===p?PRI[p].bg+" "+PRI[p].bd+" ring-2 "+PRI[p].ring:"bg-gray-50 border-gray-200 text-gray-400")}>{PRI[p].l}</button>})}</div></div>
-      </div>
+      <div><label className="text-xs font-bold text-gray-500 mb-1 block">⏰ Deadline</label><input type="date" value={dfDL} onChange={function(e){setDFDL(e.target.value)}} className={IC}/></div>
+      <div><label className="text-xs font-bold text-gray-500 mb-1 block">🔥 優先級</label><div className="flex gap-2">{["red","orange","green"].map(function(p){return<button key={p} onClick={function(){setDFP(p)}} className={"flex-1 py-3 rounded-xl text-sm font-bold border-2 transition-all "+(dfPri===p?PRI[p].bg+" "+PRI[p].bd+" ring-2 "+PRI[p].ring:"bg-gray-50 border-gray-200 text-gray-400")}>{PRI[p].l}</button>})}</div></div>
       <div className="flex gap-2"><button onClick={addDuty} className={"flex-1 "+BTN}>{dfEditId?"✓ 儲存":"+ 新增"}</button><button onClick={resetDF} className={BTN2}>取消</button></div>
     </div>}
     <div className="flex gap-1.5 overflow-x-auto hideScroll">{[{k:"pending",l:"⏳ 進行中"},{k:"all",l:"全部"},{k:"completed",l:"✅ 已完成"}].map(function(f){return<button key={f.k} onClick={function(){setDFilter(f.k)}} className={dutyFilter===f.k?"px-3.5 py-2 rounded-lg text-xs font-bold bg-white text-indigo-600 shadow-sm border border-indigo-200":"px-3.5 py-2 rounded-lg text-xs font-bold bg-gray-50 text-gray-400 border border-gray-200"}>{f.l}</button>})}</div>
