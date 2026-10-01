@@ -23,6 +23,8 @@
     @keyframes spin{to{transform:rotate(360deg)}}
     .spin{animation:spin .8s linear infinite}
     .line-clamp-2{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+    /* ★ 修改④a：手機版日曆顯示 dots ★ */
+    @media(max-width:640px){.cal-tags{display:none!important}.cal-dots-m{display:flex!important}}
     input[type="date"],input[type="time"]{min-height:44px}
     .hdr-bg{background:linear-gradient(135deg,#818cf8,#6366f1,#7c3aed)}
     .hdr-circle{pointer-events:none}
@@ -48,9 +50,12 @@ function fmtDate(s){if(!s)return"";var d=new Date(s);var wd=["日","一","二","
 function fmtDateShort(s){if(!s)return"";var d=new Date(s);return(d.getMonth()+1)+"/"+d.getDate()}
 function fmtTime(s){if(!s)return"";var p=s.split(":");return p[0]+":"+p[1]}
 function todayStr(){var d=new Date();return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0")}
+/* ★ 修改①：加 normDate helper，統一日期格式 ★ */
+function normDate(s){if(!s)return"";return String(s).substring(0,10)}
 function toDS(y,m,d){return y+"-"+String(m+1).padStart(2,"0")+"-"+String(d).padStart(2,"0")}
 function diffDays(dl){if(!dl)return null;var now=new Date();now.setHours(0,0,0,0);var d=new Date(dl);d.setHours(0,0,0,0);return Math.ceil((d-now)/(864e5))}
-function deadlineInfo(dl){if(!dl)return null;var diff=diffDays(dl);if(diff<0)return{t:"已過期 "+Math.abs(diff)+"日",c:"bg-red-100 text-red-600 border-red-200",ic:"🔴",urgent:true};if(diff===0)return{t:"今日到期",c:"bg-orange-100 text-orange-600 border-orange-200",ic:"🟠",urgent:true};if(diff<=3)return{t:diff+"日後到期",c:"bg-amber-100 text-amber-600 border-amber-200",ic:"🟡",urgent:false};return{t:diff+"日後",c:"bg-emerald-100 text-emerald-600 border-emerald-200",ic:"🟢",urgent:false}}
+/* ★ 修改②：deadlineInfo 加實際日期 ★ */
+function deadlineInfo(dl){if(!dl)return null;var diff=diffDays(dl);var ds=fmtDate(dl);if(diff<0)return{t:ds+"（已過期"+Math.abs(diff)+"日）",c:"bg-red-100 text-red-600 border-red-200",ic:"🔴",urgent:true};if(diff===0)return{t:ds+"（今日到期）",c:"bg-orange-100 text-orange-600 border-orange-200",ic:"🟠",urgent:true};if(diff<=3)return{t:ds+"（"+diff+"日後到期）",c:"bg-amber-100 text-amber-600 border-amber-200",ic:"🟡",urgent:false};return{t:ds+"（"+diff+"日後）",c:"bg-emerald-100 text-emerald-600 border-emerald-200",ic:"🟢",urgent:false}}
 function curQuarter(){var m=new Date().getMonth();return m<3?"Q1":m<6?"Q2":m<9?"Q3":"Q4"}
 function curYear(){return new Date().getFullYear()}
 function qLabel(q,y){return y+" "+q}
@@ -84,9 +89,10 @@ function Calendar({duties,itItems,meetings,onToggleDuty,onToggleIt,onEditDuty,on
   var calMap=useMemo(function(){
     var map={};
     function ensureKey(k){if(!map[k])map[k]={duties:[],it:[],meetings:[]}}
-    duties.filter(function(d){return!d.completed&&d.deadline}).forEach(function(d){ensureKey(d.deadline);map[d.deadline].duties.push(d)});
-    itItems.filter(function(i){return!i.completed&&i.deadline}).forEach(function(i){ensureKey(i.deadline);map[i.deadline].it.push(i)});
-    meetings.forEach(function(m){if(!m.date)return;ensureKey(m.date);map[m.date].meetings.push(m)});
+    /* ★ 修改③：用 normDate 統一日期格式做 key ★ */
+    duties.filter(function(d){return!d.completed&&d.deadline}).forEach(function(d){var k=normDate(d.deadline);ensureKey(k);map[k].duties.push(d)});
+    itItems.filter(function(i){return!i.completed&&i.deadline}).forEach(function(i){var k=normDate(i.deadline);ensureKey(k);map[k].it.push(i)});
+    meetings.forEach(function(m){if(!m.date)return;var k=normDate(m.date);ensureKey(k);map[k].meetings.push(m)});
     return map;
   },[duties,itItems,meetings]);
 
@@ -130,9 +136,13 @@ function Calendar({duties,itItems,meetings,onToggleDuty,onToggleIt,onEditDuty,on
         var showTags=tags.slice(0,MAX_TAGS);var moreCount=totalCount-MAX_TAGS;
         return<div key={ds} onClick={function(){if(selDay===ds)setSD(null);else setSD(ds)}} className={"bg-white flex flex-col py-1 px-0.5 cursor-pointer transition-all active:scale-95 overflow-hidden "+(isSel?"ring-2 ring-indigo-400 ring-inset bg-indigo-50":"")} style={{minHeight:78}}>
           <div className="flex justify-center shrink-0"><span className={"text-xs font-bold leading-none flex items-center justify-center "+(isToday?"w-6 h-6 rounded-full bg-indigo-500 text-white":isSel?"text-indigo-600":"text-gray-700")}>{day}</span></div>
-          {totalCount>0&&<div className="w-full mt-0.5 overflow-hidden" style={{flex:"1 1 auto",display:"flex",flexDirection:"column",gap:1}}>
-            {showTags.map(function(tag,ti){var tc=TAG_COLORS[tag.type];return<div key={ti} style={{fontSize:8,lineHeight:"11px",padding:"1px 2px",borderRadius:3,background:tc.bg,color:tc.color,fontWeight:700,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",width:"100%",textAlign:"center",borderLeft:"2px solid "+tc.dot}}>{tag.label}</div>})}
-            {moreCount>0&&<div style={{fontSize:7,lineHeight:"10px",color:"#9ca3af",fontWeight:700,textAlign:"center"}}>+{moreCount} 更多</div>}
+          {/* ★ 修改④b：桌面版文字標籤 + 手機版彩色 dots ★ */}
+          {totalCount>0&&<div className="w-full mt-0.5" style={{flex:"1 1 auto"}}>
+            <div className="cal-tags" style={{display:"flex",flexDirection:"column",gap:1,overflow:"hidden"}}>
+              {showTags.map(function(tag,ti){var tc=TAG_COLORS[tag.type];return<div key={ti} style={{fontSize:8,lineHeight:"11px",padding:"1px 2px",borderRadius:3,background:tc.bg,color:tc.color,fontWeight:700,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",width:"100%",textAlign:"center",borderLeft:"2px solid "+tc.dot}}>{tag.label}</div>})}
+              {moreCount>0&&<div style={{fontSize:7,lineHeight:"10px",color:"#9ca3af",fontWeight:700,textAlign:"center"}}>+{moreCount} 更多</div>}
+            </div>
+            <div className="cal-dots-m" style={{display:"none",justifyContent:"center",alignItems:"center",gap:3,flexWrap:"wrap",paddingTop:4}}>{(function(){var seen={};return tags.filter(function(t){if(seen[t.type])return false;seen[t.type]=true;return true}).map(function(t,ti){return<div key={ti} style={{width:6,height:6,borderRadius:"50%",background:TAG_COLORS[t.type].dot}}/>})})()}</div>
           </div>}
         </div>
       })}
@@ -342,7 +352,7 @@ function App(){
     });
     overdue.sort(function(a,b){return new Date(a.deadline)-new Date(b.deadline)});
     soon.sort(function(a,b){return new Date(a.deadline)-new Date(b.deadline)});
-    var todayMeet=meetings.filter(function(m){return m.date===td2}).sort(function(a,b){return(a.time||"").localeCompare(b.time||"")});
+    var todayMeet=meetings.filter(function(m){return normDate(m.date)===td2}).sort(function(a,b){return(a.time||"").localeCompare(b.time||"")});
     var upcomingMeet=meetings.filter(function(m){var dd=diffDays(m.date);return dd!==null&&dd>0&&dd<=7}).sort(function(a,b){return new Date(a.date)-new Date(b.date)});
     var alertCount=overdue.length+today2.length+todayMeet.length;
     return{overdue:overdue,today:today2,soon:soon,noDeadline:noDeadline,todayMeet:todayMeet,upcomingMeet:upcomingMeet,alertCount:alertCount};
@@ -426,7 +436,7 @@ function App(){
       <div className="flex gap-2"><button onClick={addMeet} className={"flex-1 "+BTN}>{mfEditId?"✓ 儲存":"+ 新增會議"}</button><button onClick={resetMF} className={BTN2}>取消</button></div>
     </div>}
     {sMeetings.length===0?<Empty icon="📅" title="未有會議" sub="撳「新增」加入會議安排"/>:
-    <div className="space-y-2.5">{sMeetings.map(function(m){var isPast=m.date&&m.date<td2;var isToday=m.date===td2;return<div key={m.id} className={"bg-white rounded-2xl shadow-sm border-2 overflow-hidden fadeIn "+(isPast?"border-gray-100 opacity-60":isToday?"border-amber-300":"border-gray-200")}><div className="p-4"><div className="flex items-start justify-between gap-3"><div className="flex-1 min-w-0">{isToday&&<span className="text-xs font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-600 border border-amber-200 mb-2 inline-block">⭐ 今日</span>}{isPast&&<span className="text-xs font-bold px-2 py-0.5 rounded-full bg-gray-100 text-gray-400 mb-2 inline-block">已過</span>}<div className="text-base font-black text-gray-800 mb-1">{m.title}</div><div className="flex items-center gap-3 flex-wrap">{m.date&&<div className="flex items-center gap-1.5"><span className="text-sm">📅</span><span className="text-sm font-bold text-indigo-600">{fmtDate(m.date)}</span></div>}{m.time&&<div className="flex items-center gap-1.5"><span className="text-sm">🕐</span><span className="text-sm font-bold text-violet-600">{fmtTime(m.time)}</span></div>}</div><FileThumb files={m.files} onView={function(f){setPF(f)}}/></div><div className="flex flex-col gap-1 shrink-0"><button onClick={function(){editMeet(m)}} className="w-8 h-8 rounded-lg bg-gray-50 flex items-center justify-center text-gray-400">✏️</button><button onClick={function(){setCD({fn:function(){delMeet(m.id)},title:"刪除會議？",msg:m.title})}} className="w-8 h-8 rounded-lg bg-gray-50 flex items-center justify-center text-gray-400">🗑</button></div></div></div></div>})}</div>}
+    <div className="space-y-2.5">{sMeetings.map(function(m){var isPast=m.date&&normDate(m.date)<td2;var isToday=normDate(m.date)===td2;return<div key={m.id} className={"bg-white rounded-2xl shadow-sm border-2 overflow-hidden fadeIn "+(isPast?"border-gray-100 opacity-60":isToday?"border-amber-300":"border-gray-200")}><div className="p-4"><div className="flex items-start justify-between gap-3"><div className="flex-1 min-w-0">{isToday&&<span className="text-xs font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-600 border border-amber-200 mb-2 inline-block">⭐ 今日</span>}{isPast&&<span className="text-xs font-bold px-2 py-0.5 rounded-full bg-gray-100 text-gray-400 mb-2 inline-block">已過</span>}<div className="text-base font-black text-gray-800 mb-1">{m.title}</div><div className="flex items-center gap-3 flex-wrap">{m.date&&<div className="flex items-center gap-1.5"><span className="text-sm">📅</span><span className="text-sm font-bold text-indigo-600">{fmtDate(m.date)}</span></div>}{m.time&&<div className="flex items-center gap-1.5"><span className="text-sm">🕐</span><span className="text-sm font-bold text-violet-600">{fmtTime(m.time)}</span></div>}</div><FileThumb files={m.files} onView={function(f){setPF(f)}}/></div><div className="flex flex-col gap-1 shrink-0"><button onClick={function(){editMeet(m)}} className="w-8 h-8 rounded-lg bg-gray-50 flex items-center justify-center text-gray-400">✏️</button><button onClick={function(){setCD({fn:function(){delMeet(m.id)},title:"刪除會議？",msg:m.title})}} className="w-8 h-8 rounded-lg bg-gray-50 flex items-center justify-center text-gray-400">🗑</button></div></div></div></div>})}</div>}
   </div>}
 
   /* ═══════ RENDER: IT ═══════ */
