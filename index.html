@@ -24,16 +24,16 @@
     .spin{animation:spin .8s linear infinite}
     .line-clamp-2{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
     input[type="date"],input[type="time"]{min-height:44px}
-    .hdr-bg{background:linear-gradient(135deg,#818cf8,#6366f1,#7c3aed);
-      -webkit-backface-visibility:hidden;backface-visibility:hidden;
-      transform:translate3d(0,0,0);will-change:transform}
+    .hdr-bg{background:linear-gradient(135deg,#818cf8,#6366f1,#7c3aed)}
     .hdr-circle{pointer-events:none}
+    @keyframes popIn{from{opacity:0;transform:scale(.92)}to{opacity:1;transform:scale(1)}}
+    .popIn{animation:popIn .2s ease-out}
   </style>
 </head>
 <body>
 <div id="root"></div>
 <script type="text/babel">
-var{useState,useRef,useMemo,useEffect}=React;
+var{useState,useRef,useMemo,useEffect,useCallback}=React;
 
 var API_URL="https://script.google.com/macros/s/AKfycbyZrP3PBIJvZaG9PJwO58uctQAbp6FYN8NOAtqFe1Q9csfeVDj5XVf0DylKo8jIRNzRdQ/exec";
 
@@ -45,31 +45,185 @@ function deleteDriveFiles(files){if(files&&files.length)files.forEach(function(f
 
 function gid(){return Date.now().toString(36)+Math.random().toString(36).substr(2,6)}
 function fmtDate(s){if(!s)return"";var d=new Date(s);var wd=["日","一","二","三","四","五","六"];return(d.getMonth()+1)+"月"+d.getDate()+"日（"+wd[d.getDay()]+"）"}
+function fmtDateShort(s){if(!s)return"";var d=new Date(s);return(d.getMonth()+1)+"/"+d.getDate()}
 function fmtTime(s){if(!s)return"";var p=s.split(":");return p[0]+":"+p[1]}
 function todayStr(){var d=new Date();return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0")}
-function deadlineInfo(dl){if(!dl)return null;var now=new Date();now.setHours(0,0,0,0);var d=new Date(dl);d.setHours(0,0,0,0);var diff=Math.ceil((d-now)/(864e5));if(diff<0)return{t:"已過期 "+Math.abs(diff)+"日",c:"bg-red-100 text-red-600 border-red-200",ic:"🔴",urgent:true};if(diff===0)return{t:"今日到期",c:"bg-orange-100 text-orange-600 border-orange-200",ic:"🟠",urgent:true};if(diff<=3)return{t:diff+"日後到期",c:"bg-amber-100 text-amber-600 border-amber-200",ic:"🟡",urgent:false};return{t:diff+"日後",c:"bg-emerald-100 text-emerald-600 border-emerald-200",ic:"🟢",urgent:false}}
+function toDS(y,m,d){return y+"-"+String(m+1).padStart(2,"0")+"-"+String(d).padStart(2,"0")}
+function diffDays(dl){if(!dl)return null;var now=new Date();now.setHours(0,0,0,0);var d=new Date(dl);d.setHours(0,0,0,0);return Math.ceil((d-now)/(864e5))}
+function deadlineInfo(dl){if(!dl)return null;var diff=diffDays(dl);if(diff<0)return{t:"已過期 "+Math.abs(diff)+"日",c:"bg-red-100 text-red-600 border-red-200",ic:"🔴",urgent:true};if(diff===0)return{t:"今日到期",c:"bg-orange-100 text-orange-600 border-orange-200",ic:"🟠",urgent:true};if(diff<=3)return{t:diff+"日後到期",c:"bg-amber-100 text-amber-600 border-amber-200",ic:"🟡",urgent:false};return{t:diff+"日後",c:"bg-emerald-100 text-emerald-600 border-emerald-200",ic:"🟢",urgent:false}}
 
 var PRI={red:{l:"緊急",bg:"bg-red-50",bd:"border-red-300",bar:"bg-red-400",badge:"bg-red-100 text-red-600",ring:"ring-red-200"},orange:{l:"一般",bg:"bg-orange-50",bd:"border-orange-300",bar:"bg-orange-400",badge:"bg-orange-100 text-orange-600",ring:"ring-orange-200"},green:{l:"低",bg:"bg-emerald-50",bd:"border-emerald-300",bar:"bg-emerald-400",badge:"bg-emerald-100 text-emerald-600",ring:"ring-emerald-200"}};
 var IC="w-full border-2 border-gray-200 rounded-xl px-4 py-3 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-indigo-300";
 var BTN="bg-gradient-to-r from-indigo-500 to-violet-500 text-white font-bold px-5 py-3 rounded-xl shadow-sm active:scale-95 transition-transform";
 var BTN2="bg-gray-100 text-gray-500 font-bold px-4 py-3 rounded-xl";
+var TAG_COLORS={meet:{bg:"#fef3c7",color:"#92400e",dot:"#f59e0b"},duty:{bg:"#e0e7ff",color:"#4338ca",dot:"#6366f1"},it:{bg:"#cffafe",color:"#0e7490",dot:"#06b6d4"}};
+var MAX_TAGS=3;
 
-/* ══════════ SHARED COMPONENTS ══════════ */
 function Empty({icon,title,sub}){return<div className="bg-white rounded-2xl p-10 text-center border-2 border-dashed border-gray-200 fadeIn"><div className="text-5xl mb-3">{icon||"📭"}</div><div className="text-base font-bold text-gray-400 mb-1">{title||"未有資料"}</div>{sub&&<div className="text-sm text-gray-300">{sub}</div>}</div>}
 function DLBadge({dl}){var info=deadlineInfo(dl);if(!info)return null;return<span className={"inline-flex items-center gap-1 text-xs font-bold px-2 py-0.5 rounded-full border "+info.c}>{info.ic} {info.t}</span>}
-
-/* ★ 可清除日期輸入 */
 function ClearDate({value,onChange,cls}){return<div className="flex gap-2 items-center"><input type="date" value={value} onChange={function(e){onChange(e.target.value)}} className={(cls||IC)+" flex-1"}/>{value&&<button type="button" onClick={function(){onChange("")}} className="shrink-0 w-10 h-10 rounded-xl bg-gray-100 text-gray-400 flex items-center justify-center text-sm hover:bg-red-50 hover:text-red-400 active:scale-95 transition-all">✕</button>}</div>}
-
 function FileThumb({files,onView,onRemove}){if(!files||files.length===0)return null;return<div className="flex gap-2 flex-wrap mt-2.5">{files.map(function(f){return<div key={f.id||f.driveFileId} className="relative group"><button onClick={function(){onView(f)}} className="w-16 h-16 rounded-xl border-2 border-gray-200 overflow-hidden bg-gray-50 flex items-center justify-center hover:border-indigo-300 active:scale-95 transition-all">{f.isImg?<img src={f.viewUrl} className="w-full h-full object-cover" onError={function(e){e.target.style.display="none"}}/>:<div className="flex flex-col items-center"><span className="text-2xl">📄</span><span className="text-gray-400 truncate w-14 text-center" style={{fontSize:7}}>{f.name}</span></div>}</button>{onRemove&&<button onClick={function(){onRemove(f.id||f.driveFileId)}} className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-red-400 text-white text-xs flex items-center justify-center shadow">✕</button>}</div>})}</div>}
-
 function FileModal({file,onClose}){if(!file)return null;return<div className="fixed inset-0 bg-black bg-opacity-85 z-50 flex items-center justify-center p-4" onClick={onClose}><div className="relative w-full max-w-3xl" onClick={function(e){e.stopPropagation()}}><button onClick={onClose} className="absolute -top-12 right-0 w-10 h-10 rounded-full bg-white bg-opacity-20 text-white text-xl flex items-center justify-center">✕</button>{file.isImg?<img src={file.viewUrl} className="w-full max-h-screen object-contain rounded-xl"/>:<div className="bg-white rounded-2xl p-8 text-center"><div className="text-6xl mb-4">📄</div><div className="text-base font-bold text-gray-700 mb-2">{file.name}</div><a href={file.viewUrl} target="_blank" rel="noopener noreferrer" className={"inline-block "+BTN}>📂 打開檔案</a>{file.downloadUrl&&<div className="mt-3"><a href={file.downloadUrl} target="_blank" rel="noopener noreferrer" className="text-sm font-bold text-indigo-500">📥 下載</a></div>}<p className="text-xs text-gray-400 mt-4">會喺新分頁開啟 Google Drive</p></div>}</div></div>}
-
 function ConfirmModal({show,title,msg,onYes,onNo}){if(!show)return null;return<div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-end sm:items-center justify-center p-4" onClick={onNo}><div className="bg-white rounded-2xl p-6 w-full max-w-sm shadow-xl fadeIn" onClick={function(e){e.stopPropagation()}}><div className="text-center mb-5"><div className="text-3xl mb-2">⚠️</div><div className="text-base font-black text-gray-700">{title||"確認刪除？"}</div>{msg&&<div className="text-sm text-gray-400 mt-1">{msg}</div>}</div><div className="flex gap-3"><button onClick={onNo} className="flex-1 py-3 rounded-xl font-bold text-gray-500 bg-gray-100">取消</button><button onClick={onYes} className="flex-1 py-3 rounded-xl font-bold text-white bg-red-500 shadow-sm">確認刪除</button></div></div></div>}
-
 function SectionHeader({icon,title,count,action,actionLabel,actionIcon}){return<div className="flex items-center justify-between mb-3"><div className="flex items-center gap-2"><span className="text-xl">{icon}</span><span className="text-base font-black text-gray-700">{title}</span>{count!=null&&count>0&&<span className="text-xs font-bold px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-600">{count}</span>}</div>{action&&<button onClick={action} className="flex items-center gap-1.5 text-sm font-bold text-indigo-500 bg-indigo-50 px-3.5 py-2 rounded-xl border border-indigo-200 active:scale-95 transition-transform"><span>{actionIcon||"+"}</span><span>{actionLabel||"新增"}</span></button>}</div>}
-
 function UploadBtn({inputRef,uploading,label}){return<div>{uploading?<div className="w-full py-3 rounded-xl border-2 border-dashed border-indigo-200 text-sm font-bold text-indigo-400 flex items-center justify-center gap-2"><div className="w-4 h-4 border-2 border-indigo-400 border-t-transparent rounded-full spin"/>上傳中...</div>:<button onClick={function(){inputRef.current.click()}} className="w-full py-3 rounded-xl border-2 border-dashed border-indigo-200 text-sm font-bold text-indigo-400 hover:bg-indigo-50 transition-colors">{label||"📎 選擇檔案"}</button>}</div>}
+
+/* ═══════════ CALENDAR ═══════════ */
+function Calendar({duties,itItems,meetings,onToggleDuty,onToggleIt,onEditDuty,onEditIt,onEditMeet}){
+  var now=new Date();
+  var[viewY,setVY]=useState(now.getFullYear());
+  var[viewM,setVM]=useState(now.getMonth());
+  var[selDay,setSD]=useState(null);
+  var td=todayStr();
+  var WDAYS=["一","二","三","四","五","六","日"];
+
+  var calMap=useMemo(function(){
+    var map={};
+    function ensureKey(k){if(!map[k])map[k]={duties:[],it:[],meetings:[]}}
+    duties.filter(function(d){return!d.completed&&d.deadline}).forEach(function(d){
+      ensureKey(d.deadline);map[d.deadline].duties.push(d);
+    });
+    itItems.filter(function(i){return!i.completed&&i.deadline}).forEach(function(i){
+      ensureKey(i.deadline);map[i.deadline].it.push(i);
+    });
+    meetings.forEach(function(m){
+      if(!m.date)return;ensureKey(m.date);map[m.date].meetings.push(m);
+    });
+    return map;
+  },[duties,itItems,meetings]);
+
+  var cells=useMemo(function(){
+    var first=new Date(viewY,viewM,1);var startDow=(first.getDay()+6)%7;
+    var daysInMonth=new Date(viewY,viewM+1,0).getDate();
+    var arr=[];
+    for(var i=0;i<startDow;i++)arr.push(null);
+    for(var d=1;d<=daysInMonth;d++)arr.push(d);
+    while(arr.length%7!==0)arr.push(null);
+    return arr;
+  },[viewY,viewM]);
+
+  function prev(){if(viewM===0){setVM(11);setVY(viewY-1)}else setVM(viewM-1);setSD(null)}
+  function next(){if(viewM===11){setVM(0);setVY(viewY+1)}else setVM(viewM+1);setSD(null)}
+  function goToday(){setVY(now.getFullYear());setVM(now.getMonth());setSD(null)}
+  var mLabel=(viewM+1)+"月 "+viewY;
+
+  function handleDayClick(day){
+    if(!day)return;
+    var ds=toDS(viewY,viewM,day);
+    if(selDay===ds){setSD(null);return}
+    setSD(ds);
+  }
+
+  var selData=selDay?calMap[selDay]:null;
+  var hasSelData=selData&&(selData.duties.length>0||selData.it.length>0||selData.meetings.length>0);
+
+  function buildTags(data){
+    if(!data)return[];
+    var tags=[];
+    var priOrder={red:0,orange:1,green:2};
+    data.meetings.slice().sort(function(a,b){return(a.time||"").localeCompare(b.time||"")}).forEach(function(m){
+      tags.push({type:"meet",label:(m.time?fmtTime(m.time)+" ":"")+m.title});
+    });
+    data.duties.slice().sort(function(a,b){return priOrder[a.priority]-priOrder[b.priority]}).forEach(function(d){
+      tags.push({type:"duty",label:d.title});
+    });
+    data.it.forEach(function(i){
+      tags.push({type:"it",label:i.title});
+    });
+    return tags;
+  }
+
+  return<div className="bg-white rounded-2xl shadow-sm border-2 border-indigo-200 overflow-hidden fadeIn">
+    <div className="flex items-center justify-between px-4 py-3 bg-gradient-to-r from-indigo-50 to-violet-50 border-b border-indigo-100">
+      <button onClick={prev} className="w-9 h-9 rounded-xl bg-white flex items-center justify-center text-indigo-500 font-bold shadow-sm active:scale-90 transition-transform border border-indigo-200">◀</button>
+      <div className="text-center">
+        <div className="text-base font-black text-gray-800">{mLabel}</div>
+        {(viewY!==now.getFullYear()||viewM!==now.getMonth())&&<button onClick={goToday} className="text-xs font-bold text-indigo-500 mt-0.5">↩ 返回今月</button>}
+      </div>
+      <button onClick={next} className="w-9 h-9 rounded-xl bg-white flex items-center justify-center text-indigo-500 font-bold shadow-sm active:scale-90 transition-transform border border-indigo-200">▶</button>
+    </div>
+    <div className="grid grid-cols-7 border-b border-gray-100">
+      {WDAYS.map(function(w){return<div key={w} className="text-center py-2 text-xs font-bold text-gray-400">{w}</div>})}
+    </div>
+    <div className="grid grid-cols-7 gap-px bg-gray-100 p-px">
+      {cells.map(function(day,idx){
+        if(day===null)return<div key={"e"+idx} className="bg-white" style={{minHeight:78}}/>;
+        var ds=toDS(viewY,viewM,day);
+        var isToday=ds===td;
+        var isSel=ds===selDay;
+        var data=calMap[ds];
+        var tags=buildTags(data);
+        var totalCount=tags.length;
+        var showTags=tags.slice(0,MAX_TAGS);
+        var moreCount=totalCount-MAX_TAGS;
+
+        return<div key={ds} onClick={function(){handleDayClick(day)}} className={"bg-white flex flex-col py-1 px-0.5 cursor-pointer transition-all active:scale-95 overflow-hidden "+(isSel?"ring-2 ring-indigo-400 ring-inset bg-indigo-50":"")} style={{minHeight:78}}>
+          <div className="flex justify-center shrink-0">
+            <span className={"text-xs font-bold leading-none flex items-center justify-center "+(isToday?"w-6 h-6 rounded-full bg-indigo-500 text-white":isSel?"text-indigo-600":"text-gray-700")}>{day}</span>
+          </div>
+          {totalCount>0&&<div className="w-full mt-0.5 overflow-hidden" style={{flex:"1 1 auto",display:"flex",flexDirection:"column",gap:1}}>
+            {showTags.map(function(tag,ti){
+              var tc=TAG_COLORS[tag.type];
+              return<div key={ti} style={{fontSize:8,lineHeight:"11px",padding:"1px 2px",borderRadius:3,background:tc.bg,color:tc.color,fontWeight:700,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",width:"100%",textAlign:"center",borderLeft:"2px solid "+tc.dot}}>{tag.label}</div>
+            })}
+            {moreCount>0&&<div style={{fontSize:7,lineHeight:"10px",color:"#9ca3af",fontWeight:700,textAlign:"center"}}>+{moreCount} 更多</div>}
+          </div>}
+        </div>
+      })}
+    </div>
+    <div className="flex items-center justify-center gap-4 py-2 border-t border-gray-100 bg-gray-50 flex-wrap">
+      <span className="flex items-center gap-1.5 text-xs text-gray-400"><span className="w-2 h-2 rounded-full" style={{background:"#6366f1"}}/>Duty</span>
+      <span className="flex items-center gap-1.5 text-xs text-gray-400"><span className="w-2 h-2 rounded-full" style={{background:"#06b6d4"}}/>IT</span>
+      <span className="flex items-center gap-1.5 text-xs text-gray-400"><span className="w-2 h-2 rounded-full" style={{background:"#f59e0b"}}/>會議</span>
+    </div>
+    {selDay&&<div className="border-t-2 border-indigo-200 bg-gradient-to-b from-indigo-50 to-white p-4 popIn">
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-2">
+          <span className="text-lg">📅</span>
+          <span className="text-sm font-black text-gray-800">{fmtDate(selDay)}</span>
+          {selDay===td&&<span className="text-xs font-bold px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-600">今日</span>}
+        </div>
+        <button onClick={function(){setSD(null)}} className="w-7 h-7 rounded-lg bg-white flex items-center justify-center text-gray-400 border border-gray-200 text-xs">✕</button>
+      </div>
+      {!hasSelData&&<div className="text-center py-3"><div className="text-2xl mb-1">📭</div><div className="text-sm text-gray-400 font-bold">呢日暫時無任何事項</div></div>}
+      {hasSelData&&<div className="space-y-2">
+        {selData.meetings.map(function(m){return<div key={"sm"+m.id} className="flex items-center gap-2.5 bg-white rounded-xl p-3 border-2 border-amber-200">
+          <div className="w-1 self-stretch rounded-full shrink-0 bg-amber-400"/>
+          <div className="flex-1 min-w-0">
+            <span className="text-xs font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-600 mb-0.5 inline-block">會議</span>
+            <div className="text-sm font-bold text-gray-800">{m.title}</div>
+            {m.time&&<div className="text-xs font-bold text-violet-600 mt-0.5">🕐 {fmtTime(m.time)}</div>}
+          </div>
+          <button onClick={function(){onEditMeet(m)}} className="w-7 h-7 rounded-lg bg-gray-50 flex items-center justify-center text-gray-400 shrink-0 text-xs">✏️</button>
+        </div>})}
+        {selData.duties.map(function(d){var pri=PRI[d.priority];return<div key={"sd"+d.id} className={"flex items-center gap-2.5 bg-white rounded-xl p-3 border-2 "+pri.bd}>
+          <div className={"w-1 self-stretch rounded-full shrink-0 "+pri.bar}/>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-1.5 mb-0.5"><span className="text-xs font-bold px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-600">Duty</span><span className={"text-xs font-bold px-1.5 py-0.5 rounded "+pri.badge}>{pri.l}</span></div>
+            <div className="text-sm font-bold text-gray-800">{d.title}</div>
+            {d.desc&&<div className="text-xs text-gray-500 line-clamp-2 mt-0.5">{d.desc}</div>}
+          </div>
+          <div className="flex flex-col gap-1 shrink-0">
+            <button onClick={function(){onToggleDuty(d.id)}} className="w-7 h-7 rounded-lg border-2 border-gray-300 flex items-center justify-center hover:border-emerald-400 hover:bg-emerald-50 active:scale-90 transition-all text-xs">✓</button>
+            <button onClick={function(){onEditDuty(d)}} className="w-7 h-7 rounded-lg bg-gray-50 flex items-center justify-center text-gray-400 text-xs">✏️</button>
+          </div>
+        </div>})}
+        {selData.it.map(function(i){return<div key={"si"+i.id} className="flex items-center gap-2.5 bg-white rounded-xl p-3 border-2 border-cyan-200">
+          <div className="w-1 self-stretch rounded-full shrink-0 bg-cyan-400"/>
+          <div className="flex-1 min-w-0">
+            <span className="text-xs font-bold px-1.5 py-0.5 rounded bg-cyan-100 text-cyan-600 mb-0.5 inline-block">IT</span>
+            <div className="text-sm font-bold text-gray-800">{i.title}</div>
+            {i.desc&&<div className="text-xs text-gray-500 line-clamp-2 mt-0.5">{i.desc}</div>}
+          </div>
+          <div className="flex flex-col gap-1 shrink-0">
+            <button onClick={function(){onToggleIt(i.id)}} className="w-7 h-7 rounded-lg border-2 border-gray-300 flex items-center justify-center hover:border-emerald-400 hover:bg-emerald-50 active:scale-90 transition-all text-xs">✓</button>
+            <button onClick={function(){onEditIt(i)}} className="w-7 h-7 rounded-lg bg-gray-50 flex items-center justify-center text-gray-400 text-xs">✏️</button>
+          </div>
+        </div>})}
+      </div>}
+    </div>}
+  </div>
+}
 
 /* ═══════════ MAIN APP ═══════════ */
 function App(){
@@ -80,7 +234,7 @@ function App(){
   var[uploading,setUploading]=useState(false);
   var saveTimers=useRef({});
 
-  var[tab,setTab]=useState("duty");
+  var[tab,setTab]=useState("today");
   var[previewFile,setPF]=useState(null);
   var[confirmDel,setCD]=useState(null);
 
@@ -138,23 +292,18 @@ function App(){
 
   async function doUploadFiles(fileList){setUploading(true);var results=[];for(var i=0;i<fileList.length;i++){var f=await uploadFileToDrive(fileList[i]);if(f)results.push(f)}setUploading(false);return results}
 
-  /* ═══ DUTY ═══ */
   function addDuty(){if(!dfTitle.trim())return;if(dfEditId){setDuties(function(p){return p.map(function(d){return d.id===dfEditId?Object.assign({},d,{title:dfTitle,desc:dfDesc,deadline:dfDL,priority:dfPri}):d})})}else{setDuties(function(p){return[{id:gid(),title:dfTitle,desc:dfDesc,deadline:dfDL,priority:dfPri,completed:false,createdAt:new Date().toISOString()}].concat(p)})}resetDF()}
   function resetDF(){setDFT("");setDFD("");setDFDL("");setDFP("green");setDFE(null);setSDF(false)}
-  function editDuty(d){setDFT(d.title);setDFD(d.desc||"");setDFDL(d.deadline||"");setDFP(d.priority);setDFE(d.id);setSDF(true)}
+  function editDuty(d){setDFT(d.title);setDFD(d.desc||"");setDFDL(d.deadline||"");setDFP(d.priority);setDFE(d.id);setSDF(true);setTab("duty");setDST("tasks")}
   function toggleDuty(id){setDuties(function(p){return p.map(function(d){return d.id===id?Object.assign({},d,{completed:!d.completed}):d})})}
   function delDuty(id){setDuties(function(p){return p.filter(function(d){return d.id!==id})})}
 
-  /* ★ 排序：完成→底 · 優先級→高先 · 有deadline→先 · 無deadline→最底 */
   var fDuties=useMemo(function(){
     var s=duties.slice().sort(function(a,b){
       if(a.completed!==b.completed)return a.completed?1:-1;
-      var o={red:0,orange:1,green:2};
-      var pd=o[a.priority]-o[b.priority];if(pd!==0)return pd;
-      if(a.deadline&&!b.deadline)return-1;
-      if(!a.deadline&&b.deadline)return 1;
-      if(a.deadline&&b.deadline)return new Date(a.deadline)-new Date(b.deadline);
-      return 0;
+      var o={red:0,orange:1,green:2};var pd=o[a.priority]-o[b.priority];if(pd!==0)return pd;
+      if(a.deadline&&!b.deadline)return-1;if(!a.deadline&&b.deadline)return 1;
+      if(a.deadline&&b.deadline)return new Date(a.deadline)-new Date(b.deadline);return 0;
     });
     if(dutyFilter==="pending")return s.filter(function(d){return!d.completed});
     if(dutyFilter==="completed")return s.filter(function(d){return d.completed});
@@ -162,29 +311,24 @@ function App(){
   },[duties,dutyFilter]);
   var pendingCount=duties.filter(function(d){return!d.completed}).length;
 
-  /* ═══ MEETING ═══ */
   function addMeet(){if(!mfTitle.trim())return;if(mfEditId){setMeetings(function(p){return p.map(function(m){return m.id===mfEditId?Object.assign({},m,{title:mfTitle,date:mfDate,time:mfTime,files:mfFiles}):m})})}else{setMeetings(function(p){return p.concat([{id:gid(),title:mfTitle,date:mfDate,time:mfTime,files:mfFiles,createdAt:new Date().toISOString()}])})}resetMF()}
   function resetMF(){setMFT("");setMFD("");setMFTm("");setMFF([]);setMFE(null);setSMF(false)}
-  function editMeet(m){setMFT(m.title);setMFD(m.date||"");setMFTm(m.time||"");setMFF(m.files||[]);setMFE(m.id);setSMF(true)}
+  function editMeet(m){setMFT(m.title);setMFD(m.date||"");setMFTm(m.time||"");setMFF(m.files||[]);setMFE(m.id);setSMF(true);setTab("duty");setDST("meetings")}
   function delMeet(id){var m=meetings.find(function(x){return x.id===id});if(m)deleteDriveFiles(m.files);setMeetings(function(p){return p.filter(function(x){return x.id!==id})})}
   async function onMeetFile(e){var fs=await doUploadFiles(e.target.files);setMFF(function(p){return p.concat(fs)});e.target.value=""}
   var sMeetings=useMemo(function(){return meetings.slice().sort(function(a,b){var da=new Date(a.date+" "+(a.time||"00:00"));var db=new Date(b.date+" "+(b.time||"00:00"));return da-db})},[meetings]);
 
-  /* ═══ IT ═══ */
   function addIt(){if(!ifTitle.trim())return;if(ifEditId){setIT(function(p){return p.map(function(i){return i.id===ifEditId?Object.assign({},i,{title:ifTitle,desc:ifDesc,deadline:ifDL}):i})})}else{setIT(function(p){return[{id:gid(),title:ifTitle,desc:ifDesc,deadline:ifDL,completed:false,createdAt:new Date().toISOString()}].concat(p)})}resetIF()}
   function resetIF(){setIFT("");setIFD("");setIFDL("");setIFE(null);setSIF(false)}
-  function editIt(i){setIFT(i.title);setIFD(i.desc||"");setIFDL(i.deadline||"");setIFE(i.id);setSIF(true)}
+  function editIt(i){setIFT(i.title);setIFD(i.desc||"");setIFDL(i.deadline||"");setIFE(i.id);setSIF(true);setTab("it")}
   function toggleIt(id){setIT(function(p){return p.map(function(i){return i.id===id?Object.assign({},i,{completed:!i.completed}):i})})}
   function delIt(id){setIT(function(p){return p.filter(function(i){return i.id!==id})})}
 
-  /* ★ 排序：完成→底 · 有deadline→先 · 無deadline→最底 */
   var fIt=useMemo(function(){
     var s=itItems.slice().sort(function(a,b){
       if(a.completed!==b.completed)return a.completed?1:-1;
-      if(a.deadline&&!b.deadline)return-1;
-      if(!a.deadline&&b.deadline)return 1;
-      if(a.deadline&&b.deadline)return new Date(a.deadline)-new Date(b.deadline);
-      return 0;
+      if(a.deadline&&!b.deadline)return-1;if(!a.deadline&&b.deadline)return 1;
+      if(a.deadline&&b.deadline)return new Date(a.deadline)-new Date(b.deadline);return 0;
     });
     if(itFilter==="pending")return s.filter(function(i){return!i.completed});
     if(itFilter==="completed")return s.filter(function(i){return i.completed});
@@ -192,7 +336,6 @@ function App(){
   },[itItems,itFilter]);
   var itPending=itItems.filter(function(i){return!i.completed}).length;
 
-  /* ═══ STAFF ═══ */
   function addStaff2(){if(!newSN.trim()||staffList.includes(newSN.trim()))return;var u=staffList.concat([newSN.trim()]);setSL(u);setNSN("");if(!selStaff)setSS(newSN.trim())}
   function rmStaff(n){(staffIssues[n]||[]).forEach(function(iss){deleteDriveFiles(iss.files)});setSL(function(p){return p.filter(function(x){return x!==n})});var ni=Object.assign({},staffIssues);delete ni[n];setSI(ni);if(selStaff===n)setSS("")}
   function addIssue(){if(!siTitle.trim()||!selStaff)return;if(siEditId){setSI(function(p){var ni=Object.assign({},p);ni[selStaff]=(ni[selStaff]||[]).map(function(i){return i.id===siEditId?Object.assign({},i,{title:siTitle,desc:siDesc,date:siDate,files:siFiles}):i});return ni})}else{setSI(function(p){var ni=Object.assign({},p);ni[selStaff]=[{id:gid(),title:siTitle,desc:siDesc,date:siDate,files:siFiles,createdAt:new Date().toISOString()}].concat(ni[selStaff]||[]);return ni})}resetSIF()}
@@ -203,18 +346,116 @@ function App(){
   var curIssues=selStaff?(staffIssues[selStaff]||[]):[];
   var totalIssues=Object.values(staffIssues).reduce(function(s,a){return s+a.length},0);
 
-  /* ═══ NOTES ═══ */
   function addNote2(){if(!nfTitle.trim())return;if(nfEditId){setNotes(function(p){return p.map(function(n){return n.id===nfEditId?Object.assign({},n,{title:nfTitle,content:nfContent}):n})})}else{setNotes(function(p){return p.concat([{id:gid(),title:nfTitle,content:nfContent,createdAt:new Date().toISOString()}])})}resetNF()}
   function resetNF(){setNFT("");setNFC("");setNFE(null);setSNF(false)}
   function editNote2(n){setNFT(n.title);setNFC(n.content);setNFE(n.id);setSNF(true)}
   function delNote(id){setNotes(function(p){return p.filter(function(n){return n.id!==id})})}
   function moveNote(id,dir){setNotes(function(p){var idx=p.findIndex(function(n){return n.id===id});if(idx<0)return p;var ni=idx+dir;if(ni<0||ni>=p.length)return p;var a=p.slice();var tmp=a[idx];a[idx]=a[ni];a[ni]=tmp;return a})}
 
-  var TABS=[{id:"duty",icon:"📋",label:"Duty",count:pendingCount+meetings.length},{id:"it",icon:"💻",label:"IT",count:itPending},{id:"staff",icon:"👥",label:"同事",count:totalIssues},{id:"notes",icon:"📌",label:"公司需知",count:notes.length}];
+  var todayData=useMemo(function(){
+    var td2=todayStr();var overdue=[];var today2=[];var soon=[];var noDeadline=[];
+    duties.filter(function(d){return!d.completed}).forEach(function(d){
+      var dd=diffDays(d.deadline);var item={type:"duty",id:d.id,title:d.title,desc:d.desc,deadline:d.deadline,priority:d.priority,raw:d};
+      if(!d.deadline){noDeadline.push(item)}else if(dd<0){overdue.push(item)}else if(dd===0){today2.push(item)}else if(dd<=7){soon.push(item)}
+    });
+    itItems.filter(function(i){return!i.completed}).forEach(function(i){
+      var dd=diffDays(i.deadline);var item={type:"it",id:i.id,title:i.title,desc:i.desc,deadline:i.deadline,raw:i};
+      if(!i.deadline){noDeadline.push(item)}else if(dd<0){overdue.push(item)}else if(dd===0){today2.push(item)}else if(dd<=7){soon.push(item)}
+    });
+    overdue.sort(function(a,b){return new Date(a.deadline)-new Date(b.deadline)});
+    soon.sort(function(a,b){return new Date(a.deadline)-new Date(b.deadline)});
+    var todayMeet=meetings.filter(function(m){return m.date===td2}).sort(function(a,b){return(a.time||"").localeCompare(b.time||"")});
+    var upcomingMeet=meetings.filter(function(m){var dd=diffDays(m.date);return dd!==null&&dd>0&&dd<=7}).sort(function(a,b){return new Date(a.date)-new Date(b.date)});
+    var alertCount=overdue.length+today2.length+todayMeet.length;
+    return{overdue:overdue,today:today2,soon:soon,noDeadline:noDeadline,todayMeet:todayMeet,upcomingMeet:upcomingMeet,alertCount:alertCount};
+  },[duties,itItems,meetings]);
+
+  var TABS=[
+    {id:"today",icon:"🔔",label:"今日",count:todayData.alertCount},
+    {id:"duty",icon:"📋",label:"Duty",count:pendingCount+meetings.length},
+    {id:"it",icon:"💻",label:"IT",count:itPending},
+    {id:"staff",icon:"👥",label:"同事",count:totalIssues},
+    {id:"notes",icon:"📌",label:"需知",count:notes.length}
+  ];
 
   if(!loaded){return<div className="min-h-screen flex flex-col items-center justify-center bg-gray-50"><div className="text-5xl mb-4 pulse2">📋</div><div className="text-base font-bold text-gray-400">{loadErr||"載入中..."}</div>{loadErr&&<button onClick={function(){location.reload()}} className={"mt-4 "+BTN}>重試</button>}</div>}
 
-  /* ──────── DUTY TAB ──────── */
+  function renderToday(){
+    var d=todayData;var now2=new Date();var wd=["日","一","二","三","四","五","六"];
+    var dateLabel=(now2.getMonth()+1)+"月"+now2.getDate()+"日 星期"+wd[now2.getDay()];
+    var allClear=d.overdue.length===0&&d.today.length===0&&d.todayMeet.length===0&&d.soon.length===0&&d.noDeadline.length===0;
+
+    function renderItem(item){
+      var isDuty=item.type==="duty";var pri=isDuty?PRI[item.priority]:null;
+      return<div key={item.type+item.id} className="bg-white rounded-xl border-2 border-gray-200 overflow-hidden fadeIn">
+        <div className="flex">
+          <div className={"w-1.5 shrink-0 "+(isDuty?(pri?pri.bar:"bg-indigo-400"):"bg-cyan-400")}/>
+          <div className="flex-1 p-3">
+            <div className="flex items-start gap-2.5">
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 mb-0.5 flex-wrap">
+                  <span className={"text-xs font-bold px-1.5 py-0.5 rounded "+(isDuty?"bg-indigo-100 text-indigo-600":"bg-cyan-100 text-cyan-600")}>{isDuty?"Duty":"IT"}</span>
+                  {isDuty&&pri&&<span className={"text-xs font-bold px-1.5 py-0.5 rounded "+pri.badge}>{pri.l}</span>}
+                </div>
+                <div className="text-sm font-bold text-gray-800">{item.title}</div>
+                {item.desc&&<div className="text-xs text-gray-400 line-clamp-2 mt-0.5">{item.desc}</div>}
+                {item.deadline&&<div className="mt-1"><DLBadge dl={item.deadline}/></div>}
+                {!item.deadline&&<span className="inline-block mt-1 text-xs font-bold px-2 py-0.5 rounded-full bg-gray-100 text-gray-400">⏳ 無期限</span>}
+              </div>
+              <div className="flex flex-col gap-1 shrink-0">
+                <button onClick={function(){isDuty?toggleDuty(item.id):toggleIt(item.id)}} className="w-7 h-7 rounded-lg border-2 border-gray-300 flex items-center justify-center hover:border-emerald-400 hover:bg-emerald-50 active:scale-90 transition-all text-xs">✓</button>
+                <button onClick={function(){isDuty?editDuty(item.raw):editIt(item.raw)}} className="w-7 h-7 rounded-lg bg-gray-50 flex items-center justify-center text-gray-400 text-xs">✏️</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    }
+
+    function renderMeetItem(m){
+      return<div key={"m"+m.id} className="bg-white rounded-xl border-2 border-amber-200 overflow-hidden fadeIn">
+        <div className="flex">
+          <div className="w-1.5 shrink-0 bg-amber-400"/>
+          <div className="flex-1 p-3">
+            <div className="flex items-start gap-2.5">
+              <div className="flex-1 min-w-0">
+                <span className="text-xs font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-600 mb-0.5 inline-block">會議</span>
+                <div className="text-sm font-bold text-gray-800">{m.title}</div>
+                <div className="flex items-center gap-3 mt-1 flex-wrap">
+                  {m.date&&<span className="text-xs font-bold text-amber-600">📅 {fmtDate(m.date)}</span>}
+                  {m.time&&<span className="text-xs font-bold text-violet-600">🕐 {fmtTime(m.time)}</span>}
+                </div>
+              </div>
+              <button onClick={function(){editMeet(m)}} className="w-7 h-7 rounded-lg bg-gray-50 flex items-center justify-center text-gray-400 shrink-0 text-xs">✏️</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    }
+
+    return<div className="space-y-5 fadeIn">
+      <Calendar duties={duties} itItems={itItems} meetings={meetings} onToggleDuty={toggleDuty} onToggleIt={toggleIt} onEditDuty={editDuty} onEditIt={editIt} onEditMeet={editMeet}/>
+      <div className="bg-gradient-to-r from-indigo-50 to-violet-50 rounded-2xl p-4 border border-indigo-200">
+        <div className="text-xl font-black text-gray-800">☀️ {dateLabel}</div>
+        <div className="text-sm text-gray-500 mt-1">{allClear?"今日暫時無待辦事項，做得好 🎉":"以下係你今日要留意嘅事項"}</div>
+        {!allClear&&<div className="flex gap-2 flex-wrap mt-3">
+          {d.overdue.length>0&&<span className="text-xs font-bold px-2.5 py-1 rounded-full bg-red-100 text-red-600 border border-red-200">🔴 已過期 {d.overdue.length}</span>}
+          {d.today.length>0&&<span className="text-xs font-bold px-2.5 py-1 rounded-full bg-orange-100 text-orange-600 border border-orange-200">🟠 今日到期 {d.today.length}</span>}
+          {d.todayMeet.length>0&&<span className="text-xs font-bold px-2.5 py-1 rounded-full bg-amber-100 text-amber-600 border border-amber-200">📅 今日會議 {d.todayMeet.length}</span>}
+          {d.soon.length>0&&<span className="text-xs font-bold px-2.5 py-1 rounded-full bg-yellow-100 text-yellow-600 border border-yellow-200">🟡 7日內 {d.soon.length}</span>}
+          {d.noDeadline.length>0&&<span className="text-xs font-bold px-2.5 py-1 rounded-full bg-gray-100 text-gray-500 border border-gray-200">⏳ 無期限 {d.noDeadline.length}</span>}
+        </div>}
+      </div>
+      {allClear&&<Empty icon="🎉" title="全部搞掂！" sub="未有待辦事項，休息下先～"/>}
+      {d.overdue.length>0&&<div><div className="flex items-center gap-2 mb-2.5"><span className="text-lg">🔴</span><span className="text-sm font-black text-red-600">已過期</span><span className="text-xs font-bold px-2 py-0.5 rounded-full bg-red-100 text-red-600">{d.overdue.length}</span></div><div className="space-y-2">{d.overdue.map(renderItem)}</div></div>}
+      {d.today.length>0&&<div><div className="flex items-center gap-2 mb-2.5"><span className="text-lg">🟠</span><span className="text-sm font-black text-orange-600">今日到期</span><span className="text-xs font-bold px-2 py-0.5 rounded-full bg-orange-100 text-orange-600">{d.today.length}</span></div><div className="space-y-2">{d.today.map(renderItem)}</div></div>}
+      {d.todayMeet.length>0&&<div><div className="flex items-center gap-2 mb-2.5"><span className="text-lg">📅</span><span className="text-sm font-black text-amber-600">今日會議</span><span className="text-xs font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-600">{d.todayMeet.length}</span></div><div className="space-y-2">{d.todayMeet.map(renderMeetItem)}</div></div>}
+      {d.soon.length>0&&<div><div className="flex items-center gap-2 mb-2.5"><span className="text-lg">🟡</span><span className="text-sm font-black text-yellow-600">7 日內到期</span><span className="text-xs font-bold px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-600">{d.soon.length}</span></div><div className="space-y-2">{d.soon.map(renderItem)}</div></div>}
+      {d.upcomingMeet.length>0&&<div><div className="flex items-center gap-2 mb-2.5"><span className="text-lg">🗓</span><span className="text-sm font-black text-violet-600">即將到來會議</span><span className="text-xs font-bold px-2 py-0.5 rounded-full bg-violet-100 text-violet-600">{d.upcomingMeet.length}</span></div><div className="space-y-2">{d.upcomingMeet.map(renderMeetItem)}</div></div>}
+      {d.noDeadline.length>0&&<div><div className="flex items-center gap-2 mb-2.5"><span className="text-lg">⏳</span><span className="text-sm font-black text-gray-400">無期限</span><span className="text-xs font-bold px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">{d.noDeadline.length}</span></div><div className="space-y-2">{d.noDeadline.map(renderItem)}</div></div>}
+    </div>
+  }
+
   function renderDuty(){return<div className="space-y-4">
     <div className="flex gap-1.5 bg-gray-100 p-1 rounded-xl"><button onClick={function(){setDST("tasks")}} className={dutySubTab==="tasks"?"flex-1 py-2.5 rounded-lg text-sm font-bold bg-white text-indigo-600 shadow-sm":"flex-1 py-2.5 rounded-lg text-sm font-bold text-gray-400"}>📝 待辦事項 {pendingCount>0&&<span className="text-xs bg-red-100 text-red-500 px-1.5 py-0.5 rounded-full ml-1">{pendingCount}</span>}</button><button onClick={function(){setDST("meetings")}} className={dutySubTab==="meetings"?"flex-1 py-2.5 rounded-lg text-sm font-bold bg-white text-indigo-600 shadow-sm":"flex-1 py-2.5 rounded-lg text-sm font-bold text-gray-400"}>📅 會議 {meetings.length>0&&<span className="text-xs bg-indigo-100 text-indigo-500 px-1.5 py-0.5 rounded-full ml-1">{meetings.length}</span>}</button></div>
     {dutySubTab==="tasks"&&renderDutyTasks()}
@@ -237,7 +478,6 @@ function App(){
         <div className={"w-1.5 shrink-0 "+(d.completed?"bg-gray-300":pri.bar)}/>
         <div className="flex-1 p-3.5">
           <div className="flex items-start gap-3">
-            <button onClick={function(){toggleDuty(d.id)}} className={"w-7 h-7 rounded-lg border-2 flex items-center justify-center shrink-0 mt-0.5 transition-all "+(d.completed?"bg-emerald-400 border-emerald-400 text-white":"border-gray-300 hover:border-indigo-400")}>{d.completed&&"✓"}</button>
             <div className="flex-1 min-w-0">
               <div className={"text-sm font-bold mb-0.5 "+(d.completed?"text-gray-400 line-through":"text-gray-800")}>{d.title}</div>
               {d.desc&&<div className={"text-xs mb-1.5 line-clamp-2 "+(d.completed?"text-gray-300":"text-gray-500")}>{d.desc}</div>}
@@ -247,6 +487,7 @@ function App(){
               </div>
             </div>
             <div className="flex flex-col gap-1 shrink-0">
+              <button onClick={function(){toggleDuty(d.id)}} className={"w-8 h-8 rounded-lg border-2 flex items-center justify-center transition-all active:scale-90 "+(d.completed?"bg-emerald-400 border-emerald-400 text-white":"border-gray-300 hover:border-emerald-400 hover:bg-emerald-50")}>✓</button>
               <button onClick={function(){editDuty(d)}} className="w-8 h-8 rounded-lg bg-gray-50 flex items-center justify-center text-gray-400 hover:bg-indigo-50 hover:text-indigo-500">✏️</button>
               <button onClick={function(){setCD({fn:function(){delDuty(d.id)},title:"刪除任務？",msg:d.title})}} className="w-8 h-8 rounded-lg bg-gray-50 flex items-center justify-center text-gray-400 hover:bg-red-50 hover:text-red-500">🗑</button>
             </div>
@@ -256,17 +497,17 @@ function App(){
     </div>})}</div>}
   </div>}
 
-  function renderMeetings(){var td=todayStr();return<div className="space-y-3 fadeIn">
+  function renderMeetings(){var td2=todayStr();return<div className="space-y-3 fadeIn">
     <SectionHeader icon="📅" title="會議時間表" count={meetings.length} action={function(){resetMF();setSMF(!showMF)}} actionLabel={showMF?"收起":"新增"}/>
     {showMF&&<div className="bg-white rounded-2xl p-4 shadow-sm border-2 border-indigo-200 space-y-3 fadeIn">
       <input value={mfTitle} onChange={function(e){setMFT(e.target.value)}} placeholder="會議主題..." className={IC} autoFocus/>
-      <div><label className="text-xs font-bold text-gray-500 mb-1 block">📅 日期</label><ClearDate value={mfDate} onChange={setMFD}/></div>
-      <div><label className="text-xs font-bold text-gray-500 mb-1 block">🕐 時間</label><div className="flex gap-2 items-center"><input type="time" value={mfTime} onChange={function(e){setMFTm(e.target.value)}} className={IC+" flex-1"}/>{mfTime&&<button onClick={function(){setMFTm("")}} className="shrink-0 w-10 h-10 rounded-xl bg-gray-100 text-gray-400 flex items-center justify-center text-sm hover:bg-red-50 hover:text-red-400 active:scale-95">✕</button>}</div></div>
+      <div><label className="text-xs font-bold text-gray-500 mb-1 block">📅 日期（選填）</label><ClearDate value={mfDate} onChange={setMFD}/></div>
+      <div><label className="text-xs font-bold text-gray-500 mb-1 block">🕐 時間（選填）</label><div className="flex gap-2 items-center"><input type="time" value={mfTime} onChange={function(e){setMFTm(e.target.value)}} className={IC+" flex-1"}/>{mfTime&&<button onClick={function(){setMFTm("")}} className="shrink-0 w-10 h-10 rounded-xl bg-gray-100 text-gray-400 flex items-center justify-center text-sm hover:bg-red-50 hover:text-red-400 active:scale-95">✕</button>}</div></div>
       <div><label className="text-xs font-bold text-gray-500 mb-1 block">📎 附件（PDF / 相片）</label><input ref={meetRef} type="file" accept="image/*,application/pdf" multiple onChange={onMeetFile} className="hidden"/><UploadBtn inputRef={meetRef} uploading={uploading} label="📎 選擇檔案"/><FileThumb files={mfFiles} onView={function(f){setPF(f)}} onRemove={function(fid){deleteDriveFile(fid);setMFF(function(p){return p.filter(function(f){return(f.id||f.driveFileId)!==fid})})}}/></div>
       <div className="flex gap-2"><button onClick={addMeet} className={"flex-1 "+BTN}>{mfEditId?"✓ 儲存":"+ 新增會議"}</button><button onClick={resetMF} className={BTN2}>取消</button></div>
     </div>}
     {sMeetings.length===0?<Empty icon="📅" title="未有會議" sub="撳「新增」加入會議安排"/>:
-    <div className="space-y-2.5">{sMeetings.map(function(m){var isPast=m.date&&m.date<td;var isToday=m.date===td;return<div key={m.id} className={"bg-white rounded-2xl shadow-sm border-2 overflow-hidden fadeIn "+(isPast?"border-gray-100 opacity-60":isToday?"border-amber-300":"border-gray-200")}>
+    <div className="space-y-2.5">{sMeetings.map(function(m){var isPast=m.date&&m.date<td2;var isToday=m.date===td2;return<div key={m.id} className={"bg-white rounded-2xl shadow-sm border-2 overflow-hidden fadeIn "+(isPast?"border-gray-100 opacity-60":isToday?"border-amber-300":"border-gray-200")}>
       <div className="p-4">
         <div className="flex items-start justify-between gap-3">
           <div className="flex-1 min-w-0">
@@ -288,7 +529,6 @@ function App(){
     </div>})}</div>}
   </div>}
 
-  /* ──────── IT TAB ──────── */
   function renderIT(){return<div className="space-y-3 fadeIn">
     <SectionHeader icon="💻" title="IT · PictureWorks" count={itPending} action={function(){resetIF();setSIF(!showIF)}} actionLabel={showIF?"收起":"新增"}/>
     {showIF&&<div className="bg-white rounded-2xl p-4 shadow-sm border-2 border-cyan-200 space-y-3 fadeIn">
@@ -304,13 +544,13 @@ function App(){
         <div className={"w-1.5 shrink-0 "+(i.completed?"bg-gray-300":dlI&&dlI.urgent?"bg-red-400":"bg-cyan-400")}/>
         <div className="flex-1 p-3.5">
           <div className="flex items-start gap-3">
-            <button onClick={function(){toggleIt(i.id)}} className={"w-7 h-7 rounded-lg border-2 flex items-center justify-center shrink-0 mt-0.5 transition-all "+(i.completed?"bg-emerald-400 border-emerald-400 text-white":"border-gray-300 hover:border-cyan-400")}>{i.completed&&"✓"}</button>
             <div className="flex-1 min-w-0">
               <div className={"text-sm font-bold mb-0.5 "+(i.completed?"text-gray-400 line-through":"text-gray-800")}>{i.title}</div>
               {i.desc&&<div className={"text-xs mb-1.5 line-clamp-2 "+(i.completed?"text-gray-300":"text-gray-500")}>{i.desc}</div>}
               {i.deadline?<DLBadge dl={i.deadline}/>:!i.completed&&<span className="text-xs font-bold px-2 py-0.5 rounded-full bg-gray-100 text-gray-400 border border-gray-200">⏳ 無期限</span>}
             </div>
             <div className="flex flex-col gap-1 shrink-0">
+              <button onClick={function(){toggleIt(i.id)}} className={"w-8 h-8 rounded-lg border-2 flex items-center justify-center transition-all active:scale-90 "+(i.completed?"bg-emerald-400 border-emerald-400 text-white":"border-gray-300 hover:border-emerald-400 hover:bg-emerald-50")}>✓</button>
               <button onClick={function(){editIt(i)}} className="w-8 h-8 rounded-lg bg-gray-50 flex items-center justify-center text-gray-400">✏️</button>
               <button onClick={function(){setCD({fn:function(){delIt(i.id)},title:"刪除？",msg:i.title})}} className="w-8 h-8 rounded-lg bg-gray-50 flex items-center justify-center text-gray-400">🗑</button>
             </div>
@@ -320,7 +560,6 @@ function App(){
     </div>})}</div>}
   </div>}
 
-  /* ──────── STAFF TAB ──────── */
   function renderStaff(){return<div className="space-y-4 fadeIn">
     <SectionHeader icon="👥" title="同事管理"/>
     <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100">
@@ -357,7 +596,6 @@ function App(){
     </div>}
   </div>}
 
-  /* ──────── NOTES TAB ──────── */
   function renderNotes(){return<div className="space-y-3 fadeIn">
     <SectionHeader icon="📌" title="公司需知" count={notes.length} action={function(){resetNF();setSNF(!showNF)}} actionLabel={showNF?"收起":"新增"}/>
     {showNF&&<div className="bg-white rounded-2xl p-4 shadow-sm border-2 border-amber-200 space-y-3 fadeIn">
@@ -396,7 +634,6 @@ function App(){
   }
 
   return<div className="min-h-screen bg-gray-50 pb-8">
-    {/* ★ 用 hdr-bg class 防止手機背景移位 */}
     <div className="hdr-bg px-5 pt-6 pb-8 text-white relative overflow-hidden">
       <div className="hdr-circle absolute top-0 right-0 w-40 h-40 bg-white opacity-10 rounded-full" style={{transform:"translate(30px,-30px)"}}/>
       <div className="hdr-circle absolute bottom-0 left-0 w-24 h-24 bg-white opacity-5 rounded-full" style={{transform:"translate(-10px,10px)"}}/>
@@ -409,7 +646,6 @@ function App(){
         </div>
       </div>
     </div>
-
     <div className="sticky top-0 z-40 bg-white border-b border-gray-200 overflow-x-auto hideScroll shadow-sm" style={{transform:"translateZ(0)"}}>
       <div className="flex gap-1 px-3 py-2" style={{minWidth:"max-content"}}>
         {TABS.map(function(t){return<button key={t.id} onClick={function(){setTab(t.id)}} className={tab===t.id?"px-4 py-2 rounded-full text-sm font-bold whitespace-nowrap bg-gradient-to-r from-indigo-500 to-violet-500 text-white shadow":"px-4 py-2 rounded-full text-sm font-bold whitespace-nowrap text-gray-500 hover:bg-gray-100"}>
@@ -418,14 +654,13 @@ function App(){
         </button>})}
       </div>
     </div>
-
     <div className="max-w-4xl mx-auto px-4 py-5">
+      {tab==="today"&&renderToday()}
       {tab==="duty"&&renderDuty()}
       {tab==="it"&&renderIT()}
       {tab==="staff"&&renderStaff()}
       {tab==="notes"&&renderNotes()}
     </div>
-
     <FileModal file={previewFile} onClose={function(){setPF(null)}}/>
     <ConfirmModal show={!!confirmDel} title={confirmDel?confirmDel.title:""} msg={confirmDel?confirmDel.msg:""} onYes={function(){if(confirmDel)confirmDel.fn();setCD(null)}} onNo={function(){setCD(null)}}/>
   </div>
